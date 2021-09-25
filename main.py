@@ -1,0 +1,336 @@
+import os
+import socket
+import datetime
+import sys
+import tqdm
+from time import perf_counter, sleep
+
+from constants import MAX_QUERY_SIZE, SOCKET_PORT
+
+BUFFER_SIZE = 1024 * 8 #8KB
+SEPARATOR = "<SEPARATOR>"
+
+# битрейт
+def speed(buf, t0, t1):
+    return round(len(buf)/(t1-t0)/1024**2, 2)
+
+
+class TCPServer:
+    SERVER_STOPPED_MESSAGE = b'SERVER STOPPED!' # b-префикс означает bytes строковый литерал
+    LOG_FILE = 'server_log_{}.log'
+
+    RECEIVE_BUFFER_SIZE = 1024
+    TIMEOUT = 60
+
+    LOG_DIR = 'logs'
+    STORAGE_DIR = 'storage'
+
+    def __init__(self, host='', port=SOCKET_PORT, max_client_count=MAX_QUERY_SIZE, sock=None, log_file=None): # конструктор класса
+        self.max_client_count = max_client_count
+        self.host = host
+        self.port = port
+        self.server_address = (self.host, self.port)
+        self.socket = sock
+
+        self.log_file = log_file
+        self.startLogging()
+
+        self.connections = []
+
+    def startLogging(self):
+        cur_dir = os.path.abspath(os.path.curdir) # Получить абсолютный путь файла или каталога
+        storage_path = os.path.join(cur_dir, self.STORAGE_DIR) # правильно соединяет переданный путь cur_dir к одному или более компонентов пути *STORAGE_DIR
+        log_path = os.path.join(cur_dir, self.LOG_DIR) # правильно соединяет переданный путь cur_dir к одному или более компонентов пути *LOG_DIR
+
+
+        if not os.path.exists(storage_path):
+            os.mkdir(storage_path) # создает каталог с именем storage_path
+
+        if not os.path.exists(log_path):
+            os.mkdir(log_path) # создает каталог с именем log_path
+
+        log_file = os.path.join(
+            log_path,
+            self.LOG_FILE.format(datetime.datetime.now().strftime('%d.%m.%Y__%H.%M.%S'))
+        )
+
+        if not self.log_file or self.log_file.closed:
+            self.log_file = open(log_file, 'w')
+
+        self.log('server created')
+        self.log('server storage path {}'.format(storage_path))
+        self.log('server log path {}'.format(log_path))
+
+        hostname = socket.gethostname()
+        ip_address = socket.gethostbyname(hostname)
+
+        self.log('server ip address: port = {}:{}'.format(ip_address, self.port))
+        self.log_file.close()
+        self.LOG_FILE = log_file
+
+    def socketOpen(self):
+        self.socket.listen(self.max_client_count) # подготавливает сокет для приема соединений, означает максимальное количество подключений, которые операционная система может поставить в очередь для этого сокета
+        self.log('open socket for {} clients'.format(self.max_client_count))
+
+    def createSocket(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # создать TCP-сокет семейства AF_INET типа потоковый сокет
+        #  устанавливает значение опции сокета
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60) # Время (в секундах) простоя (idle) соединения, по прошествии которого TCP начнёт отправлять проверочные пакеты (keepalive probes), если для сокета включён параметр SO_KEEPALIVE
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 60) # Время в секундах между отправками отдельных проверочных пакетов (keepalive probes).
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 10) # Максимальное число проверок (keepalive probes) TCP, отправляемых перед сбросом соединения.
+
+        sock.bind(self.server_address) # bind () используется, когда сокет необходимо сделать сокетом сервера
+
+        self.log('create socket {}'.format(sock))
+
+        return sock
+
+    def clientWait(self):
+        conn, addr = self.socket.accept() # Метод Socket.accept() принимает соединение. Сокет должен быть привязан к адресу и прослушивать соединения
+
+        # conn.settimeout(self.TIMEOUT)
+        self.connections.append((conn, addr))
+
+        self.log('new client connected {}'.format(addr))
+
+        return conn, addr
+
+    def clientProcessing(self, connection, addr):
+        hostname = socket.gethostname()
+        ip_address = socket.gethostbyname(hostname)
+
+        while True:
+            data = connection.recv(self.RECEIVE_BUFFER_SIZE)
+            connection.settimeout(self.TIMEOUT)
+            if not data:
+                return
+
+            command, *params = data.split(b' ') #  разбивает строку на части
+            self.log('client {} send commend {} with params {}'.format(addr, command, params))
+
+            if command == b'ping':
+                connection.send(b'pong')
+            elif command == b'pong':
+                connection.send(b'ping')
+            elif command == b'help':
+                connection.send(b'''help - to see list of commands
+                ping - test that the server is alive
+                kill - to stop server
+                echo - to resent message to a client
+                upload - to upload file to the server `upload file_name_on_your_machine.extension file_name_on_server`
+                download - to download file from a server `download file_name_on_server`
+                time - get server time
+                ''')
+            elif command == b'kill':
+                connection.send(b'GoodBy LOX!')
+                return -1
+            elif command == b'echo':
+                connection.send(b' '.join(params))
+            elif command == b'upload':
+                self.upload_file(connection, params[0].decode(encoding='utf-8'))
+
+            elif command == b'download':
+                connection.settimeout(20)
+                print(params)
+                self.download_file(connection, params)
+
+                connection.send(b'')
+            elif command == b'time':
+                connection.send(str(datetime.datetime.now().time()).encode(encoding='utf-8'))
+            else:
+                connection.send(b'unknown command, please try again')
+
+            # connection.close()
+
+    def closeConnection(self, connection):
+        client = list(filter(lambda x: x[0] == connection, self.connections))[0]
+
+        self.log('connection closed {}'.format(client[1]))
+        self.connections.remove(client)
+        try:
+            client.send(b'connection closed press enter')
+        except Exception as e:
+            pass
+
+    def serverStart(self):
+        os.chdir(self.STORAGE_DIR) # изменяем текущий рабочий каталог
+        self.log('server started')
+
+        while True:
+            try:
+                conn, addr = self.clientWait()
+
+                action = self.clientProcessing(connection=conn, addr=addr)
+
+                if action == -1:
+                    return
+
+                self.closeConnection(conn)
+            except ConnectionResetError as e:
+                self.log(str(e))
+                self.closeConnection(conn)
+            except Exception as e:
+                self.log(str(e))
+                self.closeConnection(conn)
+
+    def log(self, message):
+        if self.log_file.closed:
+            self.log_file = open(self.LOG_FILE, 'a')
+
+        print('{}: {}'.format(datetime.datetime.now(), message))
+        self.log_file.write('{}: {}\n'.format(datetime.datetime.now(), message))
+
+    def stop(self):
+        for conn, addr in self.connections:
+            if not conn.close:
+                conn.send(self.SERVER_STOPPED_MESSAGE)
+                conn.close()
+                self.log(f'{conn} closed by server')
+
+        self.socket.close()
+
+        self.log(f'socket closed')
+        self.log(f'server stopped')
+
+        self.log_file.close()
+
+    def run(self):
+        self.socket = self.socket if self.socket else self.createSocket()
+        self.socketOpen()
+
+        try:
+            self.serverStart()
+            self.stop()
+        except KeyboardInterrupt as e:
+            self.log(str(e))
+            self.stop()
+
+    @staticmethod
+    def upload_file(sock, file_name):
+
+        # receive the file infos
+        # receive using client socket, not server socket
+        received = sock.recv(BUFFER_SIZE).decode()
+        file_name, filesize = received.split(SEPARATOR)
+        # remove absolute path if there is
+        file_name = os.path.basename(file_name)
+        # convert to integer
+        filesize = int(filesize)
+        # start receiving the file from the socket
+        # and writing to the file stream
+        progress = tqdm.tqdm(range(filesize), f"Receiving {file_name}", unit="B", unit_scale=True, unit_divisor=1024)
+        with open(file_name, "wb") as f:
+            while True:
+                # read 1024 bytes from the socket (receive)
+                bytes_read = sock.recv(BUFFER_SIZE)
+                if not bytes_read:
+                    # nothing is received
+                    # file transmitting is done
+                    break
+                # write to the file the bytes we just received
+                f.write(bytes_read)
+                # update the progress bar
+                progress.update(len(bytes_read))
+        f.close()
+
+    @staticmethod
+    def download_file(connection, params):
+        print('Upload to client')
+        # received = connection.recv(BUFFER_SIZE).decode()
+        # file_name, filesize1 = received.split(SEPARATOR)
+        name_string = params[0]
+        print(name_string)
+        name_string = os.path.basename(name_string)
+        print(name_string)
+
+        filesize = os.path.getsize(name_string)
+        print('Upload to client1')
+        connection.send(f"{name_string}{SEPARATOR}{filesize}".encode())
+        print('Upload to client2')
+        progress = tqdm.tqdm(range(filesize), f"Sending {name_string}", unit="B", unit_scale=True, unit_divisor=1024)
+        print('Upload to client3')
+        with open(name_string, "rb") as f:
+            while True:
+                # read the bytes from the file
+                bytes_read = f.read(BUFFER_SIZE)
+                if not bytes_read:
+                    # file transmitting is done
+                    break
+                # we use sendall to assure transimission in
+                # busy networks
+                connection.sendall(bytes_read)
+                # update the progress bar
+                progress.update(len(bytes_read))
+        f.close()
+
+
+def startServer():
+    hostname = socket.gethostname()
+    ip_address = socket.gethostbyname(hostname)
+
+    sock = socket.socket()
+    sock.bind(('192.168.43.212', 54320))
+    sock.listen(MAX_QUERY_SIZE)
+
+    print('-' * 5, 'TCP Server v1.0 started', '-' * 5)
+    print('server ip address = {}'.format(ip_address))
+
+    while True:
+        try:
+            conn, addr = sock.accept()
+            print('new connection addr : {}'.format(addr))
+            while True:
+                data = conn.recv(1024)
+
+                if not data:
+                    break
+
+                command, *params = data.split(b' ')
+
+                if command == b'ping':
+                    data = b'pong'
+                elif command == b'kill':
+                    conn.send(b'GoodBy!')
+                    conn.close()
+                    sock.close()
+                    return
+                elif command == b'echo':
+                    data = b' '.join(params)
+                elif command == b'send':
+                    if params[0] == b'file':
+                        with open(params[1].decode(encoding="utf-8"), 'ab') as file:
+                            file.write(params[2])
+                            while True:
+                                data = conn.recv(1024)
+
+                                if not data:
+                                    break
+                                else:
+                                    file.write(data)
+
+                        print('receive file {}'.format(params[1].decode(encoding="utf-8")))
+                        data = b'ok'
+                elif command == b'time':
+                    data = str(datetime.datetime.now().time()).encode(encoding='utf-8')
+                else:
+                    print('receive from {} data: {}'.format(addr, data.decode(encoding="utf-8")))
+
+                conn.send(data)
+
+            print('close connection on : {}'.format(conn))
+            conn.close()
+        except Exception as e:
+            print('SERVER ERROR {}'.format(e))
+        except KeyboardInterrupt as e:
+            if conn:
+                conn.close()
+            sock.close()
+            print('SERVER STOP')
+            sys.exit(-1)
+
+
+if __name__ == '__main__':
+    # startServer()
+    server = TCPServer()
+    server.run()

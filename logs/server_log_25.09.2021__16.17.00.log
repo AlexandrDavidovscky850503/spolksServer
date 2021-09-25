@@ -1,0 +1,26 @@
+2021-09-25 16:17:00.765289: server created
+2021-09-25 16:17:00.765289: server storage path C:\Users\xiaom\PycharmProjects\spolksServer\storage
+2021-09-25 16:17:00.765289: server log path C:\Users\xiaom\PycharmProjects\spolksServer\logs
+2021-09-25 16:17:00.781230: server ip address: port = 26.30.40.16:50001
+2021-09-25 16:17:00.782227: create socket <socket.socket fd=292, family=AddressFamily.AF_INET, type=SocketKind.SOCK_STREAM, proto=0, laddr=('0.0.0.0', 50001)>
+2021-09-25 16:17:00.782227: open socket for 1 clients
+2021-09-25 16:17:00.782227: server started
+2021-09-25 16:17:56.899754: new client connected ('26.30.40.16', 63097)
+2021-09-25 16:18:01.429876: client ('26.30.40.16', 63097) send commend b'help' with params []
+2021-09-25 16:18:01.429876: connection closed ('26.30.40.16', 63097)
+2021-09-25 16:18:01.429876: new client connected ('26.30.40.16', 63098)
+2021-09-25 16:18:10.322278: client ('26.30.40.16', 63098) send commend b'ping' with params []
+2021-09-25 16:18:10.322278: connection closed ('26.30.40.16', 63098)
+2021-09-25 16:18:10.322278: new client connected ('26.30.40.16', 63099)
+2021-09-25 16:18:13.990456: client ('26.30.40.16', 63099) send commend b'ping' with params []
+2021-09-25 16:18:13.990456: connection closed ('26.30.40.16', 63099)
+2021-09-25 16:18:13.990456: new client connected ('26.30.40.16', 63102)
+2021-09-25 16:18:17.946612: client ('26.30.40.16', 63102) send commend b'pong' with params []
+2021-09-25 16:18:17.946612: connection closed ('26.30.40.16', 63102)
+2021-09-25 16:18:17.946612: new client connected ('26.30.40.16', 63103)
+2021-09-25 16:19:03.933706: client ('26.30.40.16', 63103) send commend b'time' with params []
+2021-09-25 16:19:03.933706: connection closed ('26.30.40.16', 63103)
+2021-09-25 16:19:03.933706: new client connected ('26.30.40.16', 63104)
+2021-09-25 16:29:36.452625: client ('26.30.40.16', 63104) send commend b'kill' with params []
+2021-09-25 16:29:36.452625: socket closed
+2021-09-25 16:29:36.452625: server stopped
