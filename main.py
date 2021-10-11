@@ -5,7 +5,11 @@ import sys
 import tqdm
 from time import perf_counter, sleep
 
-from constants import MAX_QUERY_SIZE, SOCKET_PORT
+MAX_QUERY_SIZE = 1
+
+SOCKET_PORT = 50002
+SOCKET_HOST = '127.0.0.1'
+CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
 
 BUFFER_SIZE = 1024 * 8 #8KB
 SEPARATOR = "<SEPARATOR>"
@@ -101,8 +105,11 @@ class TCPServer:
         ip_address = socket.gethostbyname(hostname)
 
         while True:
+            print('Wait')
             data = connection.recv(self.RECEIVE_BUFFER_SIZE)
-            connection.settimeout(self.TIMEOUT)
+            print('RECIEVED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+            print(data)
+            # connection.settimeout(self.TIMEOUT)
             if not data:
                 return
 
@@ -212,14 +219,17 @@ class TCPServer:
         # receive the file infos
         # receive using client socket, not server socket
         received = sock.recv(BUFFER_SIZE).decode()
+        sock.send(b'Start')
         file_name, filesize = received.split(SEPARATOR)
+        print('Size: ', filesize)
         # remove absolute path if there is
         file_name = os.path.basename(file_name)
         # convert to integer
         filesize = int(filesize)
         # start receiving the file from the socket
         # and writing to the file stream
-        progress = tqdm.tqdm(range(filesize), f"Receiving {file_name}", unit="B", unit_scale=True, unit_divisor=1024)
+        # progress = tqdm.tqdm(range(filesize), f"Receiving {file_name}", unit="B", unit_scale=True, unit_divisor=1024)
+        total_read = 0
         with open(file_name, "wb") as f:
             while True:
                 # read 1024 bytes from the socket (receive)
@@ -231,7 +241,11 @@ class TCPServer:
                 # write to the file the bytes we just received
                 f.write(bytes_read)
                 # update the progress bar
-                progress.update(len(bytes_read))
+                # progress.update(len(bytes_read))
+                total_read += len(bytes_read)
+                if total_read == filesize:
+                    print('All')
+                    break
         f.close()
 
     @staticmethod
@@ -240,9 +254,6 @@ class TCPServer:
         # received = connection.recv(BUFFER_SIZE).decode()
         # file_name, filesize1 = received.split(SEPARATOR)
         name_string = params[0]
-        print(name_string)
-        name_string = os.path.basename(name_string)
-        print(name_string)
 
         filesize = os.path.getsize(name_string)
         print('Upload to client1')
@@ -276,10 +287,12 @@ def startServer():
     print('-' * 5, 'TCP Server v1.0 started', '-' * 5)
     print('server ip address = {}'.format(ip_address))
 
+    conn, addr = sock.accept()
+    print('new connection addr : {}'.format(addr))
+
     while True:
         try:
-            conn, addr = sock.accept()
-            print('new connection addr : {}'.format(addr))
+
             while True:
                 data = conn.recv(1024)
 
