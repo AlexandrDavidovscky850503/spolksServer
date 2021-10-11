@@ -7,7 +7,7 @@ from time import perf_counter, sleep
 
 MAX_QUERY_SIZE = 1
 
-SOCKET_PORT = 50001
+SOCKET_PORT = 50012
 SOCKET_HOST = '127.0.0.1'
 CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
 
@@ -138,9 +138,9 @@ class TCPServer:
                 self.upload_file(connection, params[0].decode(encoding='utf-8'))
 
             elif command == b'download':
-                connection.settimeout(20)
-                print(params)
-                self.download_file(connection, params)
+                # connection.settimeout(20)
+                print(params[0].decode(encoding='utf-8'))
+                self.download_file(connection, params[0].decode(encoding='utf-8'))
 
                 connection.send(b'')
             elif command == b'time':
@@ -254,27 +254,47 @@ class TCPServer:
         print('Upload to client')
         # received = connection.recv(BUFFER_SIZE).decode()
         # file_name, filesize1 = received.split(SEPARATOR)
-        name_string = params[0]
+        name_string = params
 
         filesize = os.path.getsize(name_string)
         print('Upload to client1')
+        print(name_string)
         connection.send(f"{name_string}{SEPARATOR}{filesize}".encode())
         print('Upload to client2')
         progress = tqdm.tqdm(range(filesize), f"Sending {name_string}", unit="B", unit_scale=True, unit_divisor=1024)
-        print('Upload to client3')
-        with open(name_string, "rb") as f:
-            while True:
-                # read the bytes from the file
-                bytes_read = f.read(BUFFER_SIZE)
-                if not bytes_read:
-                    # file transmitting is done
-                    break
-                # we use sendall to assure transimission in
-                # busy networks
-                connection.sendall(bytes_read)
+        # print('Upload to client3')
+
+        f = open(name_string, "rb")
+        bytes_read = f.read()
+        while len(bytes_read) >= 256:
+            part = bytes_read[:256]
+            # print(len(part))
+            bytes_read = bytes_read[256:]
+            connection.send(part)
                 # update the progress bar
-                progress.update(len(bytes_read))
+            progress.update(len(part))
+
+        if (len(bytes_read)) > 0:
+            connection.send(bytes_read)
+            # update the progress bar
+            progress.update(len(bytes_read))
+        progress.close()
+
+        print('All')
         f.close()
+        
+        # while True:
+        #     # read the bytes from the file
+        #     bytes_read = f.read(BUFFER_SIZE)
+        #     if not bytes_read:
+        #         # file transmitting is done
+        #         break
+        #     # we use sendall to assure transimission in
+        #     # busy networks
+        #     connection.sendall(bytes_read)
+        #     # update the progress bar
+        #     progress.update(len(bytes_read))
+        # f.close()
 
 
 def startServer():
