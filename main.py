@@ -7,7 +7,7 @@ from time import perf_counter, sleep
 
 MAX_QUERY_SIZE = 1
 
-SOCKET_PORT = 50002
+SOCKET_PORT = 50001
 SOCKET_HOST = '127.0.0.1'
 CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
 
@@ -228,7 +228,7 @@ class TCPServer:
         filesize = int(filesize)
         # start receiving the file from the socket
         # and writing to the file stream
-        # progress = tqdm.tqdm(range(filesize), f"Receiving {file_name}", unit="B", unit_scale=True, unit_divisor=1024)
+        progress = tqdm.tqdm(range(filesize), f"Receiving {file_name}", unit="B", unit_scale=True, unit_divisor=1024)
         total_read = 0
         with open(file_name, "wb") as f:
             while True:
@@ -241,9 +241,10 @@ class TCPServer:
                 # write to the file the bytes we just received
                 f.write(bytes_read)
                 # update the progress bar
-                # progress.update(len(bytes_read))
+                progress.update(len(bytes_read))
                 total_read += len(bytes_read)
                 if total_read == filesize:
+                    progress.close()
                     print('All')
                     break
         f.close()
