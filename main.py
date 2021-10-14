@@ -7,11 +7,11 @@ from time import perf_counter, sleep
 
 MAX_QUERY_SIZE = 1
 
-SOCKET_PORT = 50012
+SOCKET_PORT = 50015
 SOCKET_HOST = '127.0.0.1'
 CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
 
-BUFFER_SIZE = 1024 * 8 #8KB
+BUFFER_SIZE = 1024 * 32 #8KB
 SEPARATOR = "<SEPARATOR>"
 
 # битрейт
@@ -266,10 +266,15 @@ class TCPServer:
 
         f = open(name_string, "rb")
         bytes_read = f.read()
-        while len(bytes_read) >= 256:
-            part = bytes_read[:256]
+        ii = 0
+        while len(bytes_read) >= BUFFER_SIZE:
+            ii +=1
+            if ii == 100:
+                return
+            part = bytes_read[:BUFFER_SIZE]
             # print(len(part))
-            bytes_read = bytes_read[256:]
+            # print(len(part))
+            bytes_read = bytes_read[BUFFER_SIZE:]
             connection.send(part)
                 # update the progress bar
             progress.update(len(part))
@@ -282,7 +287,7 @@ class TCPServer:
 
         print('All')
         f.close()
-        
+
         # while True:
         #     # read the bytes from the file
         #     bytes_read = f.read(BUFFER_SIZE)
