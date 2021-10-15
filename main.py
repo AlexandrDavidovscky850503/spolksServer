@@ -255,6 +255,11 @@ class TCPServer:
         # received = connection.recv(BUFFER_SIZE).decode()
         # file_name, filesize1 = received.split(SEPARATOR)
         name_string = params
+        if not os.path.isfile(name_string):
+            print('File does not exist')
+            filesize = '-'
+            connection.send(f"{name_string}{SEPARATOR}{filesize}".encode())
+            return
 
         filesize = os.path.getsize(name_string)
         print('Upload to client1')
@@ -264,13 +269,15 @@ class TCPServer:
         progress = tqdm.tqdm(range(filesize), f"Sending {name_string}", unit="B", unit_scale=True, unit_divisor=1024)
         # print('Upload to client3')
 
+        
         f = open(name_string, "rb")
+
         bytes_read = f.read()
-        ii = 0
+        # ii = 0
         while len(bytes_read) >= BUFFER_SIZE:
-            ii +=1
-            if ii == 100:
-                return
+            # ii +=1
+            # if ii == 100:
+            #     return
             part = bytes_read[:BUFFER_SIZE]
             # print(len(part))
             # print(len(part))
