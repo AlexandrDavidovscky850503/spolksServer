@@ -5,9 +5,13 @@ import sys
 import tqdm
 from time import perf_counter, sleep
 
-from constants import MAX_QUERY_SIZE, SOCKET_PORT
+MAX_QUERY_SIZE = 1
 
-BUFFER_SIZE = 1024 * 8 #8KB
+SOCKET_PORT = 50015
+SOCKET_HOST = '127.0.0.1'
+CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
+
+BUFFER_SIZE = 1024 * 32 #8KB
 SEPARATOR = "<SEPARATOR>"
 
 # битрейт
@@ -101,8 +105,11 @@ class TCPServer:
         ip_address = socket.gethostbyname(hostname)
 
         while True:
+            print('Wait')
             data = connection.recv(self.RECEIVE_BUFFER_SIZE)
-            connection.settimeout(self.TIMEOUT)
+            print('RECIEVED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+            print(data)
+            # connection.settimeout(self.TIMEOUT)
             if not data:
                 return
 
@@ -131,9 +138,9 @@ class TCPServer:
                 self.upload_file(connection, params[0].decode(encoding='utf-8'))
 
             elif command == b'download':
-                connection.settimeout(20)
-                print(params)
-                self.download_file(connection, params)
+                # connection.settimeout(20)
+                print(params[0].decode(encoding='utf-8'))
+                self.download_file(connection, params[0].decode(encoding='utf-8'))
 
                 connection.send(b'')
             elif command == b'time':
@@ -212,7 +219,9 @@ class TCPServer:
         # receive the file infos
         # receive using client socket, not server socket
         received = sock.recv(BUFFER_SIZE).decode()
+        sock.send(b'Start')
         file_name, filesize = received.split(SEPARATOR)
+        print('Size: ', filesize)
         # remove absolute path if there is
         file_name = os.path.basename(file_name)
         # convert to integer
@@ -220,6 +229,7 @@ class TCPServer:
         # start receiving the file from the socket
         # and writing to the file stream
         progress = tqdm.tqdm(range(filesize), f"Receiving {file_name}", unit="B", unit_scale=True, unit_divisor=1024)
+        total_read = 0
         with open(file_name, "wb") as f:
             while True:
                 # read 1024 bytes from the socket (receive)
@@ -232,6 +242,11 @@ class TCPServer:
                 f.write(bytes_read)
                 # update the progress bar
                 progress.update(len(bytes_read))
+                total_read += len(bytes_read)
+                if total_read == filesize:
+                    progress.close()
+                    print('All')
+                    break
         f.close()
 
     @staticmethod
@@ -239,30 +254,59 @@ class TCPServer:
         print('Upload to client')
         # received = connection.recv(BUFFER_SIZE).decode()
         # file_name, filesize1 = received.split(SEPARATOR)
-        name_string = params[0]
-        print(name_string)
-        name_string = os.path.basename(name_string)
-        print(name_string)
+        name_string = params
+        if not os.path.isfile(name_string):
+            print('File does not exist')
+            filesize = '-'
+            connection.send(f"{name_string}{SEPARATOR}{filesize}".encode())
+            return
 
         filesize = os.path.getsize(name_string)
         print('Upload to client1')
+        print(name_string)
         connection.send(f"{name_string}{SEPARATOR}{filesize}".encode())
         print('Upload to client2')
         progress = tqdm.tqdm(range(filesize), f"Sending {name_string}", unit="B", unit_scale=True, unit_divisor=1024)
-        print('Upload to client3')
-        with open(name_string, "rb") as f:
-            while True:
-                # read the bytes from the file
-                bytes_read = f.read(BUFFER_SIZE)
-                if not bytes_read:
-                    # file transmitting is done
-                    break
-                # we use sendall to assure transimission in
-                # busy networks
-                connection.sendall(bytes_read)
+        # print('Upload to client3')
+
+        
+        f = open(name_string, "rb")
+
+        bytes_read = f.read()
+        # ii = 0
+        while len(bytes_read) >= BUFFER_SIZE:
+            # ii +=1
+            # if ii == 100:
+            #     return
+            part = bytes_read[:BUFFER_SIZE]
+            # print(len(part))
+            # print(len(part))
+            bytes_read = bytes_read[BUFFER_SIZE:]
+            connection.send(part)
                 # update the progress bar
-                progress.update(len(bytes_read))
+            progress.update(len(part))
+
+        if (len(bytes_read)) > 0:
+            connection.send(bytes_read)
+            # update the progress bar
+            progress.update(len(bytes_read))
+        progress.close()
+
+        print('All')
         f.close()
+
+        # while True:
+        #     # read the bytes from the file
+        #     bytes_read = f.read(BUFFER_SIZE)
+        #     if not bytes_read:
+        #         # file transmitting is done
+        #         break
+        #     # we use sendall to assure transimission in
+        #     # busy networks
+        #     connection.sendall(bytes_read)
+        #     # update the progress bar
+        #     progress.update(len(bytes_read))
+        # f.close()
 
 
 def startServer():
@@ -276,10 +320,12 @@ def startServer():
     print('-' * 5, 'TCP Server v1.0 started', '-' * 5)
     print('server ip address = {}'.format(ip_address))
 
+    conn, addr = sock.accept()
+    print('new connection addr : {}'.format(addr))
+
     while True:
         try:
-            conn, addr = sock.accept()
-            print('new connection addr : {}'.format(addr))
+
             while True:
                 data = conn.recv(1024)
 
