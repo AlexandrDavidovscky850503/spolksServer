@@ -100,9 +100,7 @@ class TCPServer:
         ip_address = socket.gethostbyname(hostname)
 
         while True:
-            print('Wait')
             data = connection.recv(self.RECEIVE_BUFFER_SIZE)
-            print('RECIEVED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             print(data)
             if not data:
                 return
@@ -242,7 +240,6 @@ class TCPServer:
 
     @staticmethod
     def download_file(connection, params):
-        print('Upload to client')
         name_string = params
         if not os.path.isfile(name_string):
             print('File does not exist')
@@ -251,10 +248,8 @@ class TCPServer:
             return
 
         filesize = os.path.getsize(name_string)
-        print('Upload to client1')
         print(name_string)
         connection.send(f"{name_string}{SEPARATOR}{filesize}".encode())
-        print('Upload to client2')
         progress = tqdm.tqdm(range(filesize), f"Sending {name_string}", unit="B", unit_scale=True, unit_divisor=1024)
 
         f = open(name_string, "rb")
