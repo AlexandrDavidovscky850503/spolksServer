@@ -3,7 +3,6 @@ import socket
 import datetime
 import sys
 import tqdm
-from time import perf_counter, sleep
 
 MAX_QUERY_SIZE = 1
 
@@ -92,12 +91,8 @@ class TCPServer:
 
     def clientWait(self):
         conn, addr = self.socket.accept() # Метод Socket.accept() принимает соединение. Сокет должен быть привязан к адресу и прослушивать соединения
-
-        # conn.settimeout(self.TIMEOUT)
         self.connections.append((conn, addr))
-
         self.log('new client connected {}'.format(addr))
-
         return conn, addr
 
     def clientProcessing(self, connection, addr):
@@ -109,7 +104,6 @@ class TCPServer:
             data = connection.recv(self.RECEIVE_BUFFER_SIZE)
             print('RECIEVED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             print(data)
-            # connection.settimeout(self.TIMEOUT)
             if not data:
                 return
 
@@ -148,7 +142,6 @@ class TCPServer:
             else:
                 connection.send(b'unknown command, please try again')
 
-            # connection.close()
 
     def closeConnection(self, connection):
         client = list(filter(lambda x: x[0] == connection, self.connections))[0]
@@ -167,9 +160,7 @@ class TCPServer:
         while True:
             try:
                 conn, addr = self.clientWait()
-
                 action = self.clientProcessing(connection=conn, addr=addr)
-
                 if action == -1:
                     return
 
@@ -221,7 +212,7 @@ class TCPServer:
         received = sock.recv(BUFFER_SIZE).decode()
         sock.send(b'Start')
         file_name, filesize = received.split(SEPARATOR)
-        print('Size: ', filesize)
+        # print('Size: ', filesize)
         # remove absolute path if there is
         file_name = os.path.basename(file_name)
         # convert to integer
@@ -252,8 +243,6 @@ class TCPServer:
     @staticmethod
     def download_file(connection, params):
         print('Upload to client')
-        # received = connection.recv(BUFFER_SIZE).decode()
-        # file_name, filesize1 = received.split(SEPARATOR)
         name_string = params
         if not os.path.isfile(name_string):
             print('File does not exist')
@@ -267,20 +256,13 @@ class TCPServer:
         connection.send(f"{name_string}{SEPARATOR}{filesize}".encode())
         print('Upload to client2')
         progress = tqdm.tqdm(range(filesize), f"Sending {name_string}", unit="B", unit_scale=True, unit_divisor=1024)
-        # print('Upload to client3')
 
-        
         f = open(name_string, "rb")
 
         bytes_read = f.read()
         # ii = 0
         while len(bytes_read) >= BUFFER_SIZE:
-            # ii +=1
-            # if ii == 100:
-            #     return
             part = bytes_read[:BUFFER_SIZE]
-            # print(len(part))
-            # print(len(part))
             bytes_read = bytes_read[BUFFER_SIZE:]
             connection.send(part)
                 # update the progress bar
@@ -294,19 +276,6 @@ class TCPServer:
 
         print('All')
         f.close()
-
-        # while True:
-        #     # read the bytes from the file
-        #     bytes_read = f.read(BUFFER_SIZE)
-        #     if not bytes_read:
-        #         # file transmitting is done
-        #         break
-        #     # we use sendall to assure transimission in
-        #     # busy networks
-        #     connection.sendall(bytes_read)
-        #     # update the progress bar
-        #     progress.update(len(bytes_read))
-        # f.close()
 
 
 def startServer():
@@ -377,6 +346,5 @@ def startServer():
 
 
 if __name__ == '__main__':
-    # startServer()
     server = TCPServer()
     server.run()
