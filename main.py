@@ -3,19 +3,19 @@ import socket
 import datetime
 import sys
 import tqdm
-
+import time
 MAX_QUERY_SIZE = 1
 
 SOCKET_PORT = 50015
 SOCKET_HOST = '127.0.0.1'
 CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
 
-BUFFER_SIZE = 1024 * 32 #8KB
+BUFFER_SIZE = 1024 * 32
 SEPARATOR = "<SEPARATOR>"
 
 # битрейт
-def speed(buf, t0, t1):
-    return round(len(buf)/(t1-t0)/1024**2, 2)
+# def speed(buf, t0, t1):
+#     return round(len(buf)/(t1-t0)/1024**2, 2)
 
 
 class TCPServer:
@@ -30,6 +30,7 @@ class TCPServer:
     LAST_IP = '127.0.0.1'
     PREV_COMMAND = '-'
     PREV_FILE = '-'
+    progress = '-'
 
     def __init__(self, host='', port=SOCKET_PORT, max_client_count=MAX_QUERY_SIZE, sock=None, log_file=None): # конструктор класса
         self.max_client_count = max_client_count
@@ -103,33 +104,30 @@ class TCPServer:
         ip_address = socket.gethostbyname(hostname)
 
         while True:
+            # print(connection.fileno())
             data = connection.recv(self.RECEIVE_BUFFER_SIZE)
             # print(data)
             if not data:
+                print("not data LOX")
                 return
 
             command, *params = data.split(b' ') #  разбивает строку на части
-            self.log('client {} send commend {} with params {}'.format(addr, command, params))
+            self.log('client {} send command {} with params {}'.format(addr, command, params))
 
             if command == b'ping':
-                connection.send(b'pong')
-            elif command == b'pong':
                 connection.send(b'ping')
             elif command == b'cont':
-                # print('dddd')
+                print('dddd')
                 # print(addr)
                 # print(self.LAST_IP)
                 if addr[0] == self.LAST_IP:
-                    # print('c')
+                    print('c')
                     if self.PREV_COMMAND == 'U':
-                        # print('a u')
-                        # print('a', self.PREV_COMMAND)
+                        print('a u')
                         self.upload_file(connection, self.PREV_FILE,params[0].decode(encoding='utf-8'))
                     elif self.PREV_COMMAND == 'D':
-                        # print('a d')
-                        # print('a', self.PREV_COMMAND)
+                        print('a d')
                         self.download_file(connection, self.PREV_FILE,params[0].decode(encoding='utf-8'))
-
                 self.LAST_IP = '-'
             elif command == b'help':
                 connection.send(b'''help - to see list of commands
@@ -141,19 +139,15 @@ class TCPServer:
                 time - get server time
                 ''')
             elif command == b'kill':
-                connection.send(b'GoodBy LOX!')
+                connection.send(b'GoodBy my friend!')
                 return -1
             elif command == b'echo':
                 connection.send(b' '.join(params))
             elif command == b'upload':
                 self.upload_file(connection, params[0].decode(encoding='utf-8'))
-
             elif command == b'download':
-                # connection.settimeout(20)
-                # print(params[0].decode(encoding='utf-8'))
                 self.download_file(connection, params[0].decode(encoding='utf-8'))
-
-                connection.send(b'')
+                # connection.send(b'')
             elif command == b'time':
                 connection.send(str(datetime.datetime.now().time()).encode(encoding='utf-8'))
             else:
@@ -186,6 +180,7 @@ class TCPServer:
             except ConnectionResetError as e:
                 self.log(str(e))
                 self.LAST_IP = addr[0]
+                self.progress.close()
                 self.closeConnection(conn)
             except Exception as e:
                 self.log(str(e))
@@ -215,7 +210,6 @@ class TCPServer:
     def run(self):
         self.socket = self.socket if self.socket else self.createSocket()
         self.socketOpen()
-
         try:
             self.serverStart()
             self.stop()
@@ -224,11 +218,8 @@ class TCPServer:
             self.stop()
 
     def upload_file(self, sock, file_name, pos=0):
-
         self.PREV_COMMAND = 'U'
-        print(pos)
         posit = int(pos)
-        print(posit)
         # receive the file infos
         # receive using client socket, not server socket
         received = sock.recv(BUFFER_SIZE).decode()
@@ -242,10 +233,8 @@ class TCPServer:
         filesize = int(filesize)
         # start receiving the file from the socket
         # and writing to the file stream
-        progress = tqdm.tqdm(range(filesize), f"Progress of {file_name}:", unit="B", unit_scale=True, unit_divisor=1024)
-        # if(LAST_B!=0):
-        #     progress.update(LAST_B)
-        progress.update(posit)
+        self.progress = tqdm.tqdm(range(filesize), f"Progress of {file_name}:", unit="B", unit_scale=True, unit_divisor=1024)
+        self.progress.update(posit)
         total_read = 0
         with open(file_name, "wb") as f:
             while True:
@@ -255,27 +244,23 @@ class TCPServer:
                     # nothing is received
                     # file transmitting is done
                     self.LAST_IP = addr[0]
+                    self.progress.close()
                     break
                 # write to the file the bytes we just received
                 f.write(bytes_read)
-                # LAST_B += len(bytes_read)
-                # update the progress bar
-                progress.update(len(bytes_read))
+                self.progress.update(len(bytes_read))
                 total_read += len(bytes_read)
                 if total_read == filesize:
-                    progress.close()
+                    self.progress.close()
                     print('All')
                     break
-        # LAST_B = 0
         self.PREV_COMMAND = '-'
         self.PREV_FILE = '-'
         f.close()
 
     def download_file(self, connection, params, pos=0):
-        # print('bb')
-        # print(pos)
+        time.sleep(0.5)
         posit = int(pos)
-        # print(posit)
         self.PREV_COMMAND = 'D'
         name_string = params
         if not os.path.isfile(name_string):
@@ -286,109 +271,33 @@ class TCPServer:
 
         filesize = os.path.getsize(name_string)
         self.PREV_FILE = name_string
-        # print(name_string)
-        if pos==0:
+        if pos == 0:
             connection.send(f"{name_string}{SEPARATOR}{filesize}".encode())
-        progress = tqdm.tqdm(range(filesize), f"Progress of {name_string}:", unit="B", unit_scale=True, unit_divisor=1024)
+        else:
+            self.progress.close()
+        self.progress = tqdm.tqdm(range(filesize), f"Progress of {name_string}:", unit="B", unit_scale=True,
+                                  unit_divisor=1024)
 
-        # if(LAST_B!=0):
-        #     progress.update(LAST_B)
-
-        progress.update(posit)
-
+        self.progress.update(posit)
         f = open(name_string, "rb")
-
         bytes_read = f.read()
         bytes_read = bytes_read[posit:]
-
         # ii = 0
         while len(bytes_read) >= BUFFER_SIZE:
             part = bytes_read[:BUFFER_SIZE]
             bytes_read = bytes_read[BUFFER_SIZE:]
             connection.send(part)
-                # update the progress bar
-            progress.update(len(part))
+            self.progress.update(len(part))
 
         if (len(bytes_read)) > 0:
             connection.send(bytes_read)
-            # update the progress bar
-            # LAST_B += len(bytes_read)
-            progress.update(len(bytes_read))
-        progress.close()
+            self.progress.update(len(bytes_read))
+        self.progress.close()
 
         print('All')
-        # LAST_B = 0
         self.PREV_COMMAND = '-'
         self.PREV_FILE = '-'
         f.close()
-
-
-# def startServer():
-#     hostname = socket.gethostname()
-#     ip_address = socket.gethostbyname(hostname)
-#
-#     sock = socket.socket()
-#     sock.bind(('192.168.43.212', 54320))
-#     sock.listen(MAX_QUERY_SIZE)
-#
-#     print('-' * 5, 'TCP Server v1.0 started', '-' * 5)
-#     print('server ip address = {}'.format(ip_address))
-#
-#     conn, addr = sock.accept()
-#     print('new connection addr : {}'.format(addr))
-#
-#     while True:
-#         try:
-#
-#             while True:
-#                 data = conn.recv(1024)
-#
-#                 if not data:
-#                     break
-#
-#                 command, *params = data.split(b' ')
-#
-#                 if command == b'ping':
-#                     data = b'pong'
-#                 elif command == b'kill':
-#                     conn.send(b'GoodBy!')
-#                     conn.close()
-#                     sock.close()
-#                     return
-#                 elif command == b'echo':
-#                     data = b' '.join(params)
-#                 elif command == b'send':
-#                     if params[0] == b'file':
-#                         with open(params[1].decode(encoding="utf-8"), 'ab') as file:
-#                             file.write(params[2])
-#                             while True:
-#                                 data = conn.recv(1024)
-#
-#                                 if not data:
-#                                     break
-#                                 else:
-#                                     file.write(data)
-#
-#                         print('receive file {}'.format(params[1].decode(encoding="utf-8")))
-#                         data = b'ok'
-#                 elif command == b'time':
-#                     data = str(datetime.datetime.now().time()).encode(encoding='utf-8')
-#                 else:
-#                     print('receive from {} data: {}'.format(addr, data.decode(encoding="utf-8")))
-#
-#                 conn.send(data)
-#
-#             print('close connection on : {}'.format(conn))
-#             conn.close()
-#         except Exception as e:
-#             print('SERVER ERROR {}'.format(e))
-#         except KeyboardInterrupt as e:
-#             if conn:
-#                 conn.close()
-#             sock.close()
-#             print('SERVER STOP')
-#             sys.exit(-1)
-
 
 if __name__ == '__main__':
     server = TCPServer()
