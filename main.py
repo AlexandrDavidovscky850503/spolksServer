@@ -9,11 +9,6 @@ MAX_QUERY_SIZE = 1
 SOCKET_PORT = 50015
 SOCKET_HOST = '127.0.0.1'
 CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
-# LAST_IP = '127.0.0.1'
-# PREV_COMMAND = '-'
-# PREV_FILE = '-'
-# LAST_B = 0
-CONTINUE = 1
 
 BUFFER_SIZE = 1024 * 32 #8KB
 SEPARATOR = "<SEPARATOR>"
@@ -121,27 +116,27 @@ class TCPServer:
             elif command == b'pong':
                 connection.send(b'ping')
             elif command == b'cont':
-                print('dddd')
-                print(addr)
-                print(self.LAST_IP[0])
-                if addr[0] == self.LAST_IP[0]:
-                    print('c')
+                # print('dddd')
+                # print(addr)
+                # print(self.LAST_IP)
+                if addr[0] == self.LAST_IP:
+                    # print('c')
                     if self.PREV_COMMAND == 'U':
-                        print('a u')
-                        print('a', self.PREV_COMMAND)
+                        # print('a u')
+                        # print('a', self.PREV_COMMAND)
                         self.upload_file(connection, self.PREV_FILE,params[0].decode(encoding='utf-8'))
                     elif self.PREV_COMMAND == 'D':
-                        print('a d')
-                        print('a', self.PREV_COMMAND)
+                        # print('a d')
+                        # print('a', self.PREV_COMMAND)
                         self.download_file(connection, self.PREV_FILE,params[0].decode(encoding='utf-8'))
-                    CONTINUE = 0
-                self.LAST_IP[0] = '-'
+
+                self.LAST_IP = '-'
             elif command == b'help':
                 connection.send(b'''help - to see list of commands
                 ping - test that the server is alive
                 kill - to stop server
                 echo - to resent message to a client
-                upload - to upload file to the server `upload file_name_on_your_machine.extension file_name_on_server`
+                upload - to upload file to the server `upload file_name_on_your_machine.extension`
                 download - to download file from a server `download file_name_on_server`
                 time - get server time
                 ''')
@@ -167,7 +162,7 @@ class TCPServer:
 
     def closeConnection(self, connection):
         client = list(filter(lambda x: x[0] == connection, self.connections))[0]
-        CONTINUE = 1
+
         self.log('connection closed {}'.format(client[1]))
         self.connections.remove(client)
         try:
@@ -190,7 +185,7 @@ class TCPServer:
                 self.closeConnection(conn)
             except ConnectionResetError as e:
                 self.log(str(e))
-                self.LAST_IP = addr
+                self.LAST_IP = addr[0]
                 self.closeConnection(conn)
             except Exception as e:
                 self.log(str(e))
@@ -259,7 +254,7 @@ class TCPServer:
                 if not bytes_read:
                     # nothing is received
                     # file transmitting is done
-                    self.LAST_IP = addr
+                    self.LAST_IP = addr[0]
                     break
                 # write to the file the bytes we just received
                 f.write(bytes_read)
@@ -277,10 +272,10 @@ class TCPServer:
         f.close()
 
     def download_file(self, connection, params, pos=0):
-        print('bb')
-        print(pos)
+        # print('bb')
+        # print(pos)
         posit = int(pos)
-        print(posit)
+        # print(posit)
         self.PREV_COMMAND = 'D'
         name_string = params
         if not os.path.isfile(name_string):
