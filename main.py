@@ -87,9 +87,12 @@ class TCPServer:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # создать TCP-сокет семейства AF_INET типа потоковый сокет
         #  устанавливает значение опции сокета
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60) # Время (в секундах) простоя (idle) соединения, по прошествии которого TCP начнёт отправлять проверочные пакеты (keepalive probes), если для сокета включён параметр SO_KEEPALIVE
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 60) # Время в секундах между отправками отдельных проверочных пакетов (keepalive probes).
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 10) # Максимальное число проверок (keepalive probes) TCP, отправляемых перед сбросом соединения.
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+        # Время (в секундах) простоя (idle) соединения, по прошествии которого TCP начнёт отправлять проверочные пакеты (keepalive probes), если для сокета включён параметр SO_KEEPALIVE
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 60)
+        # Время в секундах между отправками отдельных проверочных пакетов (keepalive probes).
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 10)
+        # Максимальное число проверок (keepalive probes) TCP, отправляемых перед сбросом соединения.
 
         sock.bind(self.server_address) # bind () используется, когда сокет необходимо сделать сокетом сервера
 
@@ -108,9 +111,10 @@ class TCPServer:
         ip_address = socket.gethostbyname(hostname)
 
         while True:
-            # print(connection.fileno())
+            print(connection.fileno())
+            print("TUT")
             data = connection.recv(self.RECEIVE_BUFFER_SIZE)
-            # print(data)
+            print(data)
             if not data:
                 print("not data LOX")
                 return
@@ -122,8 +126,8 @@ class TCPServer:
                 connection.send(b'ping')
             elif command == b'cont':
                 print('dddd')
-                # print(addr)
-                # print(self.LAST_IP)
+                print(addr)
+                print(self.LAST_IP)
                 if addr[0] == self.LAST_IP:
                     print('c')
                     if self.PREV_COMMAND == 'U':
@@ -150,6 +154,7 @@ class TCPServer:
             elif command == b'echo':
                 connection.send(b' '.join(params))
             elif command == b'upload':
+                # connection.settimeout(7)
                 self.upload_file(connection, params[0].decode(encoding='utf-8'))
             elif command == b'download':
                 self.download_file(connection, params[0].decode(encoding='utf-8'))
@@ -190,6 +195,7 @@ class TCPServer:
                 self.closeConnection(conn)
             except Exception as e:
                 self.log(str(e))
+                self.LAST_IP = addr[0]
                 self.closeConnection(conn)
 
     def log(self, message):
@@ -229,7 +235,8 @@ class TCPServer:
         while n < amount_to_read:
             b = sock.recv(amount_to_read)
             if not b:
-                print('error')
+                print('\nerror')
+                raise Exception
                 return None
             n += len(b)
             data.extend(b)
@@ -237,14 +244,15 @@ class TCPServer:
         return data
 
     def upload_file(self, sock, file_name, pos=0):
+        time.sleep(0.5)
         self.PREV_COMMAND = 'U'
         # posit = int(pos)
         # receive the file infos
         # receive using client socket, not server socket
+        sock.send(b'Start')
 
         if pos == 0:
             received = sock.recv(BUFFER_SIZE).decode()
-            sock.send(b'Start')
             file_name, filesize = received.split(SEPARATOR)
             self.upload_file_size = int(filesize)
             self.PREV_FILE = file_name
@@ -276,25 +284,25 @@ class TCPServer:
         with open(file_name, "wb") as f:
             while True:
                 # read 1024 bytes from the socket (receive)
-                try:
-                    bytes_read = self.recvall(sock, amount_to_read)
+                # try:
+                bytes_read = self.recvall(sock, amount_to_read)
                     # if not bytes_read:
                     #     # nothing is received
                     #     # file transmitting is done
                     #     self.progress.close()
                     #     break
                     # write to the file the bytes we just received
-                except Exception:
-                    self.upload_recieved = total_read + len(bytes_read)
-                    # amount_to_read -= len(bytes_read)
-                    print('Connection lost')
-                    # time.sleep(30)
-                    return
-
+                # except Exception:
+                #     self.upload_recieved = total_read + len(bytes_read)
+                #     # amount_to_read -= len(bytes_read)
+                #     print('Connection lost')
+                #     # time.sleep(30)
+                #     return
 
                 f.write(bytes_read)
                 self.progress.update(len(bytes_read))
                 total_read += len(bytes_read)
+                self.upload_recieved = total_read
                 if filesize - total_read >= BUFFER_SIZE:
                     amount_to_read = BUFFER_SIZE
                 else:
