@@ -28,7 +28,7 @@ class TCPServer:
 
     LOG_DIR = 'logs'
     STORAGE_DIR = 'storage'
-    LAST_IP = '127.0.0.1'
+    LAST_IP = '-'
     PREV_COMMAND = '-'
     PREV_FILE = '-'
     progress = '-'
@@ -195,7 +195,7 @@ class TCPServer:
                 self.closeConnection(conn)
             except Exception as e:
                 self.log(str(e))
-                self.LAST_IP = addr[0]
+                # self.LAST_IP = addr[0]
                 self.closeConnection(conn)
 
     def log(self, message):
@@ -234,29 +234,45 @@ class TCPServer:
         data = bytearray()
         while n < amount_to_read:
             b = sock.recv(amount_to_read)
+            # print(len(b))
             if not b:
                 print('\nerror')
-                raise Exception
+                print(f"ERROR n in revall = {n}")
+                raise ConnectionResetError("GGGGFFFF")
                 return None
             n += len(b)
+            # print(f"n in revall = {n}")
             data.extend(b)
 
         return data
 
     def upload_file(self, sock, file_name, pos=0):
+        if pos==0:
+            mod ="wb"
+        else:
+            mod = "ab"
         time.sleep(0.5)
         self.PREV_COMMAND = 'U'
         # posit = int(pos)
         # receive the file infos
         # receive using client socket, not server socket
-        sock.send(b'Start')
 
         if pos == 0:
+            sock.send(b'Start')
             received = sock.recv(BUFFER_SIZE).decode()
+            print(f"recived = {received}")
             file_name, filesize = received.split(SEPARATOR)
             self.upload_file_size = int(filesize)
             self.PREV_FILE = file_name
         else:
+            # sock.send(b'Start')
+            total_r = str(self.upload_recieved)
+            # sock.send(b'cont')
+            msg = f'{total_r}'
+            sock.send(bytes(msg, encoding='utf-8'))
+
+            # sock.send(str(self.upload_recieved))
+            print(f"upload_recieved = {self.upload_recieved}")
             file_name = self.PREV_FILE
             filesize = self.upload_file_size
         # print('Size: ', filesize)
@@ -279,13 +295,15 @@ class TCPServer:
             if filesize - self.upload_recieved >= BUFFER_SIZE:
                 amount_to_read = BUFFER_SIZE
             else:
-                amount_to_read = filesize
-        
-        with open(file_name, "wb") as f:
+                amount_to_read = filesize - self.upload_recieved
+        # print("1")
+        with open(file_name, mod) as f:
             while True:
                 # read 1024 bytes from the socket (receive)
                 # try:
+                # print("2")
                 bytes_read = self.recvall(sock, amount_to_read)
+                # print(f"bytes_read={len(bytes_read)}")
                     # if not bytes_read:
                     #     # nothing is received
                     #     # file transmitting is done
@@ -298,11 +316,12 @@ class TCPServer:
                 #     print('Connection lost')
                 #     # time.sleep(30)
                 #     return
-
+                # print("3")
                 f.write(bytes_read)
                 self.progress.update(len(bytes_read))
                 total_read += len(bytes_read)
                 self.upload_recieved = total_read
+                # print("4")
                 if filesize - total_read >= BUFFER_SIZE:
                     amount_to_read = BUFFER_SIZE
                 else:
