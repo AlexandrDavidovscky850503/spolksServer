@@ -5,7 +5,6 @@ import datetime
 import sys
 import tqdm
 import time
-
 MAX_QUERY_SIZE = 1
 
 SOCKET_PORT = 50015
@@ -15,14 +14,13 @@ CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
 BUFFER_SIZE = 1024 * 32
 SEPARATOR = "<SEPARATOR>"
 
-
 # битрейт
 # def speed(buf, t0, t1):
 #     return round(len(buf)/(t1-t0)/1024**2, 2)
 
 
 class TCPServer:
-    SERVER_STOPPED_MESSAGE = b'SERVER STOPPED!'  # b-префикс означает bytes строковый литерал
+    SERVER_STOPPED_MESSAGE = b'SERVER STOPPED!' # b-префикс означает bytes строковый литерал
     LOG_FILE = 'server_log_{}.log'
 
     RECEIVE_BUFFER_SIZE = 1024
@@ -34,12 +32,11 @@ class TCPServer:
     PREV_COMMAND = '-'
     PREV_FILE = '-'
     progress = '-'
-
+    
     upload_recieved = 0
     upload_file_size = 0
 
-    def __init__(self, host='', port=SOCKET_PORT, max_client_count=MAX_QUERY_SIZE, sock=None,
-                 log_file=None):  # конструктор класса
+    def __init__(self, host='', port=SOCKET_PORT, max_client_count=MAX_QUERY_SIZE, sock=None, log_file=None): # конструктор класса
         self.max_client_count = max_client_count
         self.host = host
         self.port = port
@@ -52,17 +49,16 @@ class TCPServer:
         self.connections = []
 
     def startLogging(self):
-        cur_dir = os.path.abspath(os.path.curdir)  # Получить абсолютный путь файла или каталога
-        storage_path = os.path.join(cur_dir,
-                                    self.STORAGE_DIR)  # правильно соединяет переданный путь cur_dir к одному или более компонентов пути *STORAGE_DIR
-        log_path = os.path.join(cur_dir,
-                                self.LOG_DIR)  # правильно соединяет переданный путь cur_dir к одному или более компонентов пути *LOG_DIR
+        cur_dir = os.path.abspath(os.path.curdir) # Получить абсолютный путь файла или каталога
+        storage_path = os.path.join(cur_dir, self.STORAGE_DIR) # правильно соединяет переданный путь cur_dir к одному или более компонентов пути *STORAGE_DIR
+        log_path = os.path.join(cur_dir, self.LOG_DIR) # правильно соединяет переданный путь cur_dir к одному или более компонентов пути *LOG_DIR
+
 
         if not os.path.exists(storage_path):
-            os.mkdir(storage_path)  # создает каталог с именем storage_path
+            os.mkdir(storage_path) # создает каталог с именем storage_path
 
         if not os.path.exists(log_path):
-            os.mkdir(log_path)  # создает каталог с именем log_path
+            os.mkdir(log_path) # создает каталог с именем log_path
 
         log_file = os.path.join(
             log_path,
@@ -84,30 +80,25 @@ class TCPServer:
         self.LOG_FILE = log_file
 
     def socketOpen(self):
-        self.socket.listen(
-            self.max_client_count)  # подготавливает сокет для приема соединений, означает максимальное количество подключений, которые операционная система может поставить в очередь для этого сокета
+        self.socket.listen(self.max_client_count) # подготавливает сокет для приема соединений, означает максимальное количество подключений, которые операционная система может поставить в очередь для этого сокета
         self.log('open socket for {} clients'.format(self.max_client_count))
 
     def createSocket(self):
-        sock = socket.socket(socket.AF_INET,
-                             socket.SOCK_STREAM)  # создать TCP-сокет семейства AF_INET типа потоковый сокет
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # создать TCP-сокет семейства AF_INET типа потоковый сокет
         #  устанавливает значение опции сокета
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE,
-                        60)  # Время (в секундах) простоя (idle) соединения, по прошествии которого TCP начнёт отправлять проверочные пакеты (keepalive probes), если для сокета включён параметр SO_KEEPALIVE
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL,
-                        60)  # Время в секундах между отправками отдельных проверочных пакетов (keepalive probes).
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT,
-                        10)  # Максимальное число проверок (keepalive probes) TCP, отправляемых перед сбросом соединения.
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60) # Время (в секундах) простоя (idle) соединения, по прошествии которого TCP начнёт отправлять проверочные пакеты (keepalive probes), если для сокета включён параметр SO_KEEPALIVE
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 60) # Время в секундах между отправками отдельных проверочных пакетов (keepalive probes).
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 10) # Максимальное число проверок (keepalive probes) TCP, отправляемых перед сбросом соединения.
 
-        sock.bind(self.server_address)  # bind () используется, когда сокет необходимо сделать сокетом сервера
+        sock.bind(self.server_address) # bind () используется, когда сокет необходимо сделать сокетом сервера
 
         self.log('create socket {}'.format(sock))
 
         return sock
 
     def clientWait(self):
-        conn, addr = self.socket.accept()  # Метод Socket.accept() принимает соединение. Сокет должен быть привязан к адресу и прослушивать соединения
+        conn, addr = self.socket.accept() # Метод Socket.accept() принимает соединение. Сокет должен быть привязан к адресу и прослушивать соединения
         self.connections.append((conn, addr))
         self.log('new client connected {}'.format(addr))
         return conn, addr
@@ -124,7 +115,7 @@ class TCPServer:
                 print("not data LOX")
                 return
 
-            command, *params = data.split(b' ')  # разбивает строку на части
+            command, *params = data.split(b' ') #  разбивает строку на части
             self.log('client {} send command {} with params {}'.format(addr, command, params))
 
             if command == b'ping':
@@ -140,7 +131,7 @@ class TCPServer:
                         self.upload_file(connection, self.PREV_FILE, 1)
                     elif self.PREV_COMMAND == 'D':
                         print('a d')
-                        self.download_file(connection, self.PREV_FILE, params[0].decode(encoding='utf-8'))
+                        self.download_file(connection, self.PREV_FILE,params[0].decode(encoding='utf-8'))
                 self.LAST_IP = '-'
             # elif command == 'ucont':
             #     if addr[0] == self.LAST_IP:
@@ -168,6 +159,7 @@ class TCPServer:
             else:
                 connection.send(b'unknown command, please try again')
 
+
     def closeConnection(self, connection):
         client = list(filter(lambda x: x[0] == connection, self.connections))[0]
 
@@ -179,7 +171,7 @@ class TCPServer:
             pass
 
     def serverStart(self):
-        os.chdir(self.STORAGE_DIR)  # изменяем текущий рабочий каталог
+        os.chdir(self.STORAGE_DIR) # изменяем текущий рабочий каталог
         self.log('server started')
 
         while True:
@@ -261,13 +253,12 @@ class TCPServer:
             filesize = self.upload_file_size
         # print('Size: ', filesize)
         # remove absolute path if there is
-        file_name = os.path.basename(file_name)
+        file_name = os.path.basename(file_name)  
         # convert to integer
         filesize = int(filesize)
         # start receiving the file from the socket
         # and writing to the file stream
-        self.progress = tqdm.tqdm(range(filesize), f"Progress of {file_name}:", unit="B", unit_scale=True,
-                                  unit_divisor=1024)
+        self.progress = tqdm.tqdm(range(filesize), f"Progress of {file_name}:", unit="B", unit_scale=True, unit_divisor=1024)
         self.progress.update(self.upload_recieved)
         if pos == 0:
             total_read = 0
@@ -281,7 +272,7 @@ class TCPServer:
                 amount_to_read = BUFFER_SIZE
             else:
                 amount_to_read = filesize
-
+        
         with open(file_name, "wb") as f:
             while True:
                 # read 1024 bytes from the socket (receive)
@@ -299,6 +290,7 @@ class TCPServer:
                     print('Connection lost')
                     # time.sleep(30)
                     return
+
 
                 f.write(bytes_read)
                 self.progress.update(len(bytes_read))
@@ -357,7 +349,6 @@ class TCPServer:
         self.PREV_COMMAND = '-'
         self.PREV_FILE = '-'
         f.close()
-
 
 if __name__ == '__main__':
     server = TCPServer()
