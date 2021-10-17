@@ -1,4 +1,5 @@
 import os
+from re import T
 import socket
 import datetime
 import sys
@@ -31,6 +32,9 @@ class TCPServer:
     PREV_COMMAND = '-'
     PREV_FILE = '-'
     progress = '-'
+    
+    upload_recieved = 0
+    upload_file_size = 0
 
     def __init__(self, host='', port=SOCKET_PORT, max_client_count=MAX_QUERY_SIZE, sock=None, log_file=None): # конструктор класса
         self.max_client_count = max_client_count
@@ -124,11 +128,13 @@ class TCPServer:
                     print('c')
                     if self.PREV_COMMAND == 'U':
                         print('a u')
-                        self.upload_file(connection, self.PREV_FILE,params[0].decode(encoding='utf-8'))
+                        self.upload_file(connection, self.PREV_FILE, 1)
                     elif self.PREV_COMMAND == 'D':
                         print('a d')
                         self.download_file(connection, self.PREV_FILE,params[0].decode(encoding='utf-8'))
                 self.LAST_IP = '-'
+            # elif command == 'ucont':
+            #     if addr[0] == self.LAST_IP:
             elif command == b'help':
                 connection.send(b'''help - to see list of commands
                 ping - test that the server is alive
@@ -217,45 +223,90 @@ class TCPServer:
             self.log(str(e))
             self.stop()
 
+    def recvall(self, sock, amount_to_read):
+        n = 0
+        data = bytearray()
+        while n < amount_to_read:
+            b = sock.recv(amount_to_read)
+            if not b:
+                print('error')
+                return None
+            n += len(b)
+            data.extend(b)
+
+        return data
+
     def upload_file(self, sock, file_name, pos=0):
         self.PREV_COMMAND = 'U'
-        posit = int(pos)
+        # posit = int(pos)
         # receive the file infos
         # receive using client socket, not server socket
-        received = sock.recv(BUFFER_SIZE).decode()
-        sock.send(b'Start')
-        file_name, filesize = received.split(SEPARATOR)
+
+        if pos == 0:
+            received = sock.recv(BUFFER_SIZE).decode()
+            sock.send(b'Start')
+            file_name, filesize = received.split(SEPARATOR)
+            self.upload_file_size = int(filesize)
+            self.PREV_FILE = file_name
+        else:
+            file_name = self.PREV_FILE
+            filesize = self.upload_file_size
         # print('Size: ', filesize)
         # remove absolute path if there is
-        file_name = os.path.basename(file_name)
-        self.PREV_FILE = file_name
+        file_name = os.path.basename(file_name)  
         # convert to integer
         filesize = int(filesize)
         # start receiving the file from the socket
         # and writing to the file stream
         self.progress = tqdm.tqdm(range(filesize), f"Progress of {file_name}:", unit="B", unit_scale=True, unit_divisor=1024)
-        self.progress.update(posit)
-        total_read = 0
+        self.progress.update(self.upload_recieved)
+        if pos == 0:
+            total_read = 0
+            if filesize >= BUFFER_SIZE:
+                amount_to_read = BUFFER_SIZE
+            else:
+                amount_to_read = filesize
+        else:
+            total_read = self.upload_recieved
+            if filesize - self.upload_recieved >= BUFFER_SIZE:
+                amount_to_read = BUFFER_SIZE
+            else:
+                amount_to_read = filesize
+        
         with open(file_name, "wb") as f:
             while True:
                 # read 1024 bytes from the socket (receive)
-                bytes_read = sock.recv(BUFFER_SIZE)
-                if not bytes_read:
-                    # nothing is received
-                    # file transmitting is done
-                    self.LAST_IP = addr[0]
-                    self.progress.close()
-                    break
-                # write to the file the bytes we just received
+                try:
+                    bytes_read = self.recvall(sock, amount_to_read)
+                    # if not bytes_read:
+                    #     # nothing is received
+                    #     # file transmitting is done
+                    #     self.progress.close()
+                    #     break
+                    # write to the file the bytes we just received
+                except Exception:
+                    self.upload_recieved = total_read + len(bytes_read)
+                    # amount_to_read -= len(bytes_read)
+                    print('Connection lost')
+                    # time.sleep(30)
+                    return
+
+
                 f.write(bytes_read)
                 self.progress.update(len(bytes_read))
                 total_read += len(bytes_read)
+                if filesize - total_read >= BUFFER_SIZE:
+                    amount_to_read = BUFFER_SIZE
+                else:
+                    amount_to_read = filesize - total_read
                 if total_read == filesize:
                     self.progress.close()
                     print('All')
                     break
         self.PREV_COMMAND = '-'
         self.PREV_FILE = '-'
+        self.upload_recieved = 0
+        self.upload_file_size = 0
         f.close()
 
     def download_file(self, connection, params, pos=0):
