@@ -23,6 +23,7 @@ class TCPServer:
     LOG_DIR = 'logs'
     STORAGE_DIR = 'storage'
     LAST_IP = '-'
+    LAST_ID = 0
     PREV_COMMAND = '-'
     PREV_FILE = '-'
     progress = '-'
@@ -103,14 +104,16 @@ class TCPServer:
         conn, addr = self.socket.accept()  # Метод Socket.accept() принимает соединение. Сокет должен быть привязан к адресу и прослушивать соединения
         self.connections.append((conn, addr))
         self.log('new client connected {}'.format(addr))
-        return conn, addr
+        c_id = int(conn.recv(10))
+        conn.send(b'Start')
+        print("c_id", c_id)
+        return conn, addr, c_id
 
-    def clientProcessing(self, connection, addr):
+    def clientProcessing(self, connection, addr, c_id):
         hostname = socket.gethostname()
 
         while True:
             data = connection.recv(self.RECEIVE_BUFFER_SIZE)
-            print(data)
             if not data:
                 print("not data")
                 return
@@ -121,15 +124,13 @@ class TCPServer:
             if command == b'ping':
                 connection.send(b'ping')
             elif command == b'cont':
-                print(self.LAST_IP)
-                print(addr[0])
-                if addr[0] == self.LAST_IP:
+                if addr[0] == self.LAST_IP and self.LAST_ID == c_id:
                     if self.PREV_COMMAND == 'U':
-                        print("up")
                         self.upload_file(connection, self.PREV_FILE, 1)
                     elif self.PREV_COMMAND == 'D':
                         self.download_file(connection, self.PREV_FILE, params[0].decode(encoding='utf-8'))
                 self.LAST_IP = '-'
+                self.LAST_ID = -1
             elif command == b'help':
                 connection.send(b'''help - to see list of commands
                 ping - test that the server is alive
@@ -169,8 +170,8 @@ class TCPServer:
 
         while True:
             try:
-                conn, addr = self.clientWait()
-                action = self.clientProcessing(connection=conn, addr=addr)
+                conn, addr, c_id = self.clientWait()
+                action = self.clientProcessing(connection=conn, addr=addr, c_id=c_id)
                 if action == -1:
                     return
 
@@ -178,11 +179,13 @@ class TCPServer:
             except ConnectionResetError as e:
                 self.log(str(e))
                 self.LAST_IP = addr[0]
+                self.LAST_ID = c_id
                 self.progress.close()
                 self.closeConnection(conn)
             except Exception as e:
                 self.log(str(e))
                 self.LAST_IP = addr[0]
+                self.LAST_ID = c_id
                 self.progress.close()
                 self.closeConnection(conn)
 
