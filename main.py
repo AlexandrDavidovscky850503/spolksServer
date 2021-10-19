@@ -23,6 +23,7 @@ class TCPServer:
     LOG_DIR = 'logs'
     STORAGE_DIR = 'storage'
     LAST_IP = '-'
+    LAST_ID = 0
     PREV_COMMAND = '-'
     PREV_FILE = '-'
     progress = '-'
@@ -103,14 +104,16 @@ class TCPServer:
         conn, addr = self.socket.accept()  # Метод Socket.accept() принимает соединение. Сокет должен быть привязан к адресу и прослушивать соединения
         self.connections.append((conn, addr))
         self.log('new client connected {}'.format(addr))
-        return conn, addr
+        c_id = int(conn.recv(10))
+        conn.send(b'Start')
+        print("c_id", c_id)
+        return conn, addr, c_id
 
-    def clientProcessing(self, connection, addr):
+    def clientProcessing(self, connection, addr, c_id):
         hostname = socket.gethostname()
 
         while True:
             data = connection.recv(self.RECEIVE_BUFFER_SIZE)
-            print(data)
             if not data:
                 print("not data")
                 return
@@ -121,15 +124,13 @@ class TCPServer:
             if command == b'ping':
                 connection.send(b'ping')
             elif command == b'cont':
-                print(self.LAST_IP)
-                print(addr[0])
-                if addr[0] == self.LAST_IP:
+                if addr[0] == self.LAST_IP and self.LAST_ID == c_id:
                     if self.PREV_COMMAND == 'U':
-                        print("up")
                         self.upload_file(connection, self.PREV_FILE, 1)
                     elif self.PREV_COMMAND == 'D':
                         self.download_file(connection, self.PREV_FILE, params[0].decode(encoding='utf-8'))
                 self.LAST_IP = '-'
+                self.LAST_ID = -1
             elif command == b'help':
                 connection.send(b'''help - to see list of commands
                 ping - test that the server is alive
@@ -169,8 +170,8 @@ class TCPServer:
 
         while True:
             try:
-                conn, addr = self.clientWait()
-                action = self.clientProcessing(connection=conn, addr=addr)
+                conn, addr, c_id = self.clientWait()
+                action = self.clientProcessing(connection=conn, addr=addr, c_id=c_id)
                 if action == -1:
                     return
 
@@ -178,11 +179,13 @@ class TCPServer:
             except ConnectionResetError as e:
                 self.log(str(e))
                 self.LAST_IP = addr[0]
+                self.LAST_ID = c_id
                 self.progress.close()
                 self.closeConnection(conn)
             except Exception as e:
                 self.log(str(e))
                 self.LAST_IP = addr[0]
+                self.LAST_ID = c_id
                 self.progress.close()
                 self.closeConnection(conn)
 
@@ -305,25 +308,33 @@ class TCPServer:
 
         filesize = os.path.getsize(name_string)
         self.PREV_FILE = name_string
+        f = open(name_string, "rb")
         if pos == 0:
             connection.send(f"{name_string}{SEPARATOR}{filesize}".encode())
         else:
             self.progress.close()
+            f.seek(posit)
         self.progress = tqdm.tqdm(range(filesize), f"Progress of {name_string}:", unit="B", unit_scale=True,
                                   unit_divisor=1024)
         self.progress.update(posit)
-        f = open(name_string, "rb")
-        bytes_read = f.read()
-        bytes_read = bytes_read[posit:]
-        while len(bytes_read) >= BUFFER_SIZE:
-            part = bytes_read[:BUFFER_SIZE]
-            bytes_read = bytes_read[BUFFER_SIZE:]
+
+        # bytes_read = f.read()
+        # bytes_read = bytes_read[posit:]
+        read_amount = posit
+        while 1:
+            # part = bytes_read[:BUFFER_SIZE]
+            # bytes_read = bytes_read[BUFFER_SIZE:]
+            part = f.read(BUFFER_SIZE)
             connection.send(part)
             self.progress.update(len(part))
+            read_amount += len(part)
+            if read_amount == filesize:
+                break
 
-        if (len(bytes_read)) > 0:
-            connection.send(bytes_read)
-            self.progress.update(len(bytes_read))
+        # if (len(bytes_read)) > 0:
+        #     part = f.read()
+        #     connection.send(part)
+        #     self.progress.update(len(bytes_read))
         self.progress.close()
         print('All')
         self.PREV_COMMAND = '-'
