@@ -42,6 +42,8 @@ class TCPServer:
         self.log_file = log_file
         self.startLogging()
 
+        self.progressBarActivated = False
+
         self.connections = []
 
     def startLogging(self):
@@ -100,13 +102,13 @@ class TCPServer:
         return sock
 
     def clientWait(self):
-        print("wait")
+        # print("wait")
         conn, addr = self.socket.accept()  # Метод Socket.accept() принимает соединение. Сокет должен быть привязан к адресу и прослушивать соединения
         self.connections.append((conn, addr))
         self.log('new client connected {}'.format(addr))
         c_id = int(conn.recv(10))
         conn.send(b'Start')
-        print("c_id", c_id)
+        # print("c_id", c_id)
         return conn, addr, c_id
 
     def clientProcessing(self, connection, addr, c_id):
@@ -115,7 +117,7 @@ class TCPServer:
         while True:
             data = connection.recv(self.RECEIVE_BUFFER_SIZE)
             if not data:
-                print("not data")
+                # print("not data")
                 return
 
             command, *params = data.split(b' ')  # разбивает строку на части
@@ -180,13 +182,17 @@ class TCPServer:
                 self.log(str(e))
                 self.LAST_IP = addr[0]
                 self.LAST_ID = c_id
-                self.progress.close()
+                if self.progressBarActivated:
+                    self.progress.close()
+                    self.progressBarActivated = False
                 self.closeConnection(conn)
             except Exception as e:
                 self.log(str(e))
                 self.LAST_IP = addr[0]
                 self.LAST_ID = c_id
-                self.progress.close()
+                if self.progressBarActivated:
+                    self.progress.close()
+                    self.progressBarActivated = False
                 self.closeConnection(conn)
 
     def log(self, message):
@@ -248,8 +254,6 @@ class TCPServer:
             self.PREV_FILE = file_name
         else:
             mod = "ab"
-             # total_r = str(self.upload_recieved)
-            print(self.upload_recieved)
             msg = f'{str(self.upload_recieved)}'
             sock.send(bytes(msg, encoding='utf-8'))
             file_name = self.PREV_FILE
@@ -258,6 +262,7 @@ class TCPServer:
         file_name = os.path.basename(file_name)
         self.progress = tqdm.tqdm(range(int(filesize)), f"Progress of {file_name}:", unit="B", unit_scale=True,
                                   unit_divisor=1024)
+        self.progressBarActivated = True
         self.progress.update(self.upload_recieved)
         if pos == 0:
             total_read = 0
@@ -265,14 +270,12 @@ class TCPServer:
                 amount_to_read = BUFFER_SIZE
             else:
                 amount_to_read = int(filesize)
-                print('A', amount_to_read)
         else:
             total_read = self.upload_recieved
             if int(filesize) - self.upload_recieved >= BUFFER_SIZE:
                 amount_to_read = BUFFER_SIZE
             else:
                 amount_to_read = int(filesize) - self.upload_recieved
-                print('B',amount_to_read)
         with open(file_name, mod) as f:
             while True:
                 bytes_read = self.recvall(sock, amount_to_read)
@@ -287,6 +290,7 @@ class TCPServer:
                     amount_to_read = int(filesize) - total_read
                 if total_read == int(filesize):
                     self.progress.close()
+                    self.progressBarActivated = False
                     print('All')
                     break
         self.PREV_COMMAND = '-'
@@ -313,17 +317,15 @@ class TCPServer:
             connection.send(f"{name_string}{SEPARATOR}{filesize}".encode())
         else:
             self.progress.close()
+            self.progressBarActivated = False
             f.seek(posit)
         self.progress = tqdm.tqdm(range(filesize), f"Progress of {name_string}:", unit="B", unit_scale=True,
                                   unit_divisor=1024)
+        self.progressBarActivated = True
         self.progress.update(posit)
 
-        # bytes_read = f.read()
-        # bytes_read = bytes_read[posit:]
         read_amount = posit
         while 1:
-            # part = bytes_read[:BUFFER_SIZE]
-            # bytes_read = bytes_read[BUFFER_SIZE:]
             part = f.read(BUFFER_SIZE)
             connection.send(part)
             self.progress.update(len(part))
@@ -331,11 +333,8 @@ class TCPServer:
             if read_amount == filesize:
                 break
 
-        # if (len(bytes_read)) > 0:
-        #     part = f.read()
-        #     connection.send(part)
-        #     self.progress.update(len(bytes_read))
         self.progress.close()
+        self.progressBarActivated = False
         print('All')
         self.PREV_COMMAND = '-'
         self.PREV_FILE = '-'
