@@ -13,6 +13,15 @@ BUFFER_SIZE = 1024 * 32
 SEPARATOR = "<SEPARATOR>"
 
 
+
+#============================================================
+
+#============================================================
+
+
+
+
+
 class TCPServer:
     SERVER_STOPPED_MESSAGE = b'SERVER STOPPED!'  # b-префикс означает bytes строковый литерал
     LOG_FILE = 'server_log_{}.log'
@@ -340,8 +349,211 @@ class TCPServer:
         self.PREV_FILE = '-'
         f.close()
 
+#============================= UDP START ===================================
+clients_addr = []
+waiting_clients = []
+OK_STATUS = 200
+SERVER_ERROR = 500
+UDP_BUFFER_SIZE = 1024
+UDP_WINDOW_SIZE = 4096
 
-if __name__ == '__main__':
+# UDP_SERVER = '-'
+
+def download(addr, file_name):
+    global UDP_WINDOW_SIZE
+
+    f = open(file_name, "rb+")
+
+    size = int(os.path.getsize(file_name))
+    total_size=0
+
+    print("File size: %f" % (size))
+
+    client_window = int(get_data()[0])
+
+    if (UDP_WINDOW_SIZE > client_window):
+        UDP_WINDOW_SIZE = client_window
+
+    send_data(addr, UDP_WINDOW_SIZE)
+
+    send_data(addr, size)
+
+    data_size_recv = int(get_data()[0])
+
+    waiting_client = search_by_addr(waiting_clients, addr) # ==
+    if (len(waiting_clients) > 0 and waiting_client != False and waiting_client["file_name"] == file_name and
+                waiting_client['command'] == 'download'):
+        waiting_clients.remove(waiting_client)
+        data_size_recv = int(waiting_client['progress'])
+
+    send_data(addr, data_size_recv)
+
+    f.seek(data_size_recv, 0)
+
+    current_pos = data_size_recv
+
+    print("current_pos = ")
+    print(current_pos)
+    progress = tqdm.tqdm(range(int(size)), f"Progress of {file_name}:", unit="B", unit_scale=True,
+                         unit_divisor=1024)
+    progress.update(total_size)
+    while (1):
+        try:
+            if (current_pos >= size):
+                server.sendto(b"EOF", addr)
+                break
+            else:
+                data_file = f.read(UDP_BUFFER_SIZE)
+                server.sendto(data_file, addr)
+                current_pos = current_pos + UDP_BUFFER_SIZE
+                f.seek(current_pos)
+                total_size+=len(data_file)
+                progress.update(len(data_file))
+                # print(total_size)
+                if total_size == size:
+                    break
+
+            client_window = client_window - UDP_BUFFER_SIZE
+            if (client_window == 0):
+
+                received_data = get_data()[0]
+                client_window = UDP_WINDOW_SIZE
+
+                if (received_data == "ERROR"):
+                    handle_disconnect(addr, "download", file_name, data_size_recv)
+                    break
+                else:
+                    data_size_recv = int(received_data)
+
+
+
+        except KeyboardInterrupt:
+            f.close()
+            server.close()
+            os._exit(1)
+            progress.close()
+
+    progress.close()
+    print("END")
+    if(total_size == size):
+        print("All")
+    f.close()
+
+def save_to_waiting_clients(addr, command, file_name, progress):
+    waiting_clients.append(
+        {
+            'addr': addr[0],
+            'command': command,
+            'file_name': file_name,
+            'progress': progress
+        })
+
+def handle_disconnect(client, command, file_name, progress):
+    save_to_waiting_clients(client, command, file_name, progress)
+    time.sleep(1)
+    print("lost connection")
+
+def search_by_addr(list, addr):
+    found_client = [element for element in list if element['addr'] == addr[0]]
+    return found_client[0] if len(found_client) > 0 else False
+
+
+def get_data():
+    data, address = server.recvfrom(UDP_BUFFER_SIZE)
+    data = data.decode('utf-8')
+    return [data, address]
+
+def send_data(addr, data):
+    server.sendto(str(data).encode('utf-8'), addr)
+
+def send_status(addr, request, status):
+    message = str("" + request + " " + str(status))
+    send_data(addr, message)
+
+def handle_client_request(addr, request):
+    data = request.split()
+    command = data[0]
+
+    if (len(data) == 2):
+        params = data[1]
+
+    if (command == "download"):
+        print(params)
+        if (os.path.isfile(params)): #==
+            send_status(addr, command, OK_STATUS) #==
+            download(addr, params)
+        else:
+            no_file = "File: " + params + " is not exist."
+            send_status_and_message(addr, command, SERVER_ERROR, "No such file")
+
+
+    elif (command == "echo"):
+        send_status(addr, command, OK_STATUS)
+        echo(addr, params)
+
+    elif (command == "time"):
+        send_status(addr, command, OK_STATUS)
+        send_time(addr)
+
+    elif (command == "exit"):
+        send_status(addr, command, OK_STATUS)
+        exit_client(addr)
+
+    else:
+        send_status_and_message(addr, command, SERVER_ERROR, "Unknown command")
+
+
+def exit_client(addr):
+    clients_addr.remove(addr)
+
+def send_time(addr):
+    server_time = "Server time: " + str(datetime.datetime.now().time())[:19]
+    send_data(addr, server_time)
+
+def echo(addr, body):
+    time.sleep(0.001)
+    send_data(addr, body)
+
+def send_status_and_message(addr, request, status, message):
+    message = str("" + request + " " + str(status) + " " + message)
+    send_data(addr, message)
+
+def add_client_address(addr):
+    if not addr in clients_addr:
+        clients_addr.append(addr)
+        print("Accepted client", addr)
+
+def get_data_from_client():
+    data, address = server.recvfrom(UDP_BUFFER_SIZE)
+    data = data.decode('utf-8')
+    return [data, address]
+
+#============================= UDP END =====================================
+
+# if __name__ == '__main__':
+print("1 - UDP Server\n2 - TCP Server")
+num = int(input("Введите число: "))
+if num == 2:
+    print("TCP server")
     server = TCPServer()
     server.run()
-    
+elif num == 1:
+    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    server.bind(CONNECTION_DATA)
+    print("UDP server : %s:%d(UDP)" % (SOCKET_HOST, SOCKET_PORT))
+
+    # UDP_SERVER =
+    os.chdir('storage')  # изменяем текущий рабочий каталог
+    cur_dir = os.path.abspath(os.path.curdir)  # Получить абсолютный путь файла или каталога
+    storage_path = os.path.join(cur_dir, 'storage')  # правильно соединяет переданный путь cur_dir к одному или более компонентов пути *STORAGE_DIR
+    if not os.path.exists(storage_path):
+        os.mkdir(storage_path)  # создает каталог с именем storage_path
+    time.sleep(1)
+    while True:
+        request, addr = get_data_from_client()
+
+        add_client_address(addr)
+        print("get a command: ", request)
+        handle_client_request(addr, request)
