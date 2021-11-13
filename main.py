@@ -131,12 +131,14 @@ def search_by_addr(list, addr):
 
 
 def get_data():
-    data, address = server.recvfrom(UDP_BUFFER_SIZE)
+    # data, address = server.recvfrom(UDP_BUFFER_SIZE)
+    data, address, a = udp_recv(1024, None, 1)
     data = data.decode('utf-8')
     return [data, address]
 
 def send_data(addr, data):
-    server.sendto(str(data).encode('utf-8'), addr)
+    # server.sendto(str(data).encode('utf-8'), addr)
+    udp_send(str(data), addr, 1024, 1)
 
 def send_status(addr, request, status):
     message = str("" + request + " " + str(status))
@@ -156,7 +158,7 @@ def handle_client_request(addr, request):
             send_status(addr, command, OK_STATUS) #==
             download(addr, params)
         else:
-            no_file = "File: " + params + " is not exist."
+            # no_file = "File: " + params + " is not exist."
             send_status_and_message(addr, command, SERVER_ERROR, "No such file")
 
 
