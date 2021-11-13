@@ -161,15 +161,15 @@ def handle_client_request(addr, request):
 
 
     elif (command == "echo"):
-        send_status(addr, command, OK_STATUS)
+        # send_status(addr, command, OK_STATUS)
         echo(addr, params)
 
     elif (command == "time"):
-        send_status(addr, command, OK_STATUS)
+        # send_status(addr, command, OK_STATUS)
         send_time(addr)
 
     elif (command == "exit"):
-        send_status(addr, command, OK_STATUS)
+        # send_status(addr, command, OK_STATUS)
         exit_client(addr)
 
     else:
@@ -181,10 +181,10 @@ def exit_client(addr):
 
 def send_time(addr):
     server_time = "Server time: " + str(datetime.datetime.now().time())[:19]
-    send_data(addr, server_time)
+    udp_send(server_time, addr=addr, bytes_amount=len(server_time), datagrams_amount=1)
+    # send_data(addr, server_time)
 
 def echo(addr, body):
-    time.sleep(0.001)
     udp_send(body, addr=addr, bytes_amount=len(body), datagrams_amount=1)
     # send_data(addr, body)
 
