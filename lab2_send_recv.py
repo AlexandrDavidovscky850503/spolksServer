@@ -34,8 +34,8 @@ def udp_recv(bytes_amount, timeout, datagrams_amount):
         # if not error_flag:
         
         print('seq_num', seq_num)
-        if 7 - datagram_count_in < datagrams_amount and seq_num >= 0 and seq_num < datagrams_amount - (7 - datagram_count_in) - 1:
-            seq_num_temp = 7 + 1 + seq_num
+        if 99999 - datagram_count_in < datagrams_amount and seq_num >= 0 and seq_num < datagrams_amount - (99999 - datagram_count_in) - 1:
+            seq_num_temp = 99999 + 1 + seq_num
         else:
             seq_num_temp = seq_num
         print('datagram_count_in', datagram_count_in)
@@ -56,15 +56,15 @@ def udp_recv(bytes_amount, timeout, datagrams_amount):
     if all(b==True for b in recv_flags):
         for i in range(datagrams_amount):
             data += buffer[i]
-        if datagram_count_in + datagrams_amount >= 7:
-            datagram_count_in = datagrams_amount - (7 - datagram_count_in) - 1
+        if datagram_count_in + datagrams_amount >= 99999:
+            datagram_count_in = datagrams_amount - (99999 - datagram_count_in) - 1
         else:
             datagram_count_in += datagrams_amount
     else:
         for i in range(datagrams_amount):
             if recv_flags[i] == True:
                 data += buffer[i]
-                if datagram_count_in == 7:
+                if datagram_count_in == 99999:
                     datagram_count_in = 0
                 else:
                     datagram_count_in += 1
@@ -82,7 +82,7 @@ def udp_recv(bytes_amount, timeout, datagrams_amount):
     return data, addr, exc_flag
   
   
-  def udp_send(data, addr, bytes_amount, datagrams_amount):
+def udp_send(data, addr, bytes_amount, datagrams_amount):
     global datagram_count_out
     datagram_count_out_old = datagram_count_out
     print('start ', datagram_count_out)
@@ -97,7 +97,7 @@ def udp_recv(bytes_amount, timeout, datagrams_amount):
         udp_socket.sendto(data_part, addr)
         data = data[bytes_amount:]
         # datagram_count_out += 1
-        if datagram_count_out == 7:
+        if datagram_count_out == 99999:
             datagram_count_out = 0
         else:
             datagram_count_out += 1
@@ -110,8 +110,8 @@ def udp_recv(bytes_amount, timeout, datagrams_amount):
     print('datagrams_amount ', datagrams_amount)
     print('seq_num_int ', seq_num_int)
     print('datagram_count_out ', datagram_count_out)
-    if 7 - datagram_count_out_old < datagrams_amount and seq_num_int >= 0 and seq_num_int < datagrams_amount - (7 - datagram_count_out_old):
-        sent_amount = 7 - datagrams_amount + 1 + seq_num_int
+    if 99999 - datagram_count_out_old < datagrams_amount and seq_num_int >= 0 and seq_num_int < datagrams_amount - (99999 - datagram_count_out_old):
+        sent_amount = 99999 - datagrams_amount + 1 + seq_num_int
     else:
         sent_amount = seq_num_int - datagram_count_out_old
 
