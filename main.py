@@ -7,7 +7,8 @@ import time
 MAX_QUERY_SIZE = 1
 
 SOCKET_PORT = 50015
-SOCKET_HOST = '127.0.0.1'
+SOCKET_HOST = 'localhost'
+# SOCKET_HOST = '192.168.191.24'
 CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
 BUFFER_SIZE = 1024 * 32
 SEPARATOR = "<SEPARATOR>"
@@ -399,7 +400,7 @@ def download(addr, file_name):
         try:
             if (current_pos >= size):
                 # server.sendto(b"EOF", addr)
-                udp_send("EOF", addr, 1024, 1.)
+                udp_send("EOF", addr, 1024, UDP_DATAGRAMS_AMOUNT)
                 break
             else:
                 data_file = f.read(UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT)
@@ -543,41 +544,46 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
     # print('Send')
     # print('start ', datagram_count_out)
     data_part = bytes()
-    for i in range(datagrams_amount):
-        temp = format(datagram_count_out, '05d').encode('utf-8')
-        # print('===iteration ', i)
-        data_part = data[:bytes_amount]
-        data_part = temp + data_part
-        # print(data_part)
-        # print(data)
-        server.sendto(data_part, addr)
-        data = data[bytes_amount:]
-        # datagram_count_out += 1
-        if datagram_count_out == 99999:
-            datagram_count_out = 0
+    while(True):
+        for i in range(datagrams_amount):
+            temp = format(datagram_count_out, '05d').encode('utf-8')
+            # print('===iteration ', i)
+            data_part = data[:bytes_amount]
+            data_part = temp + data_part
+            # print(data_part)
+            # print(data)
+            server.sendto(data_part, addr)
+            data = data[bytes_amount:]
+            # datagram_count_out += 1
+            if datagram_count_out == 99999:
+                datagram_count_out = 0
+            else:
+                datagram_count_out += 1
+
+        seq_num = server.recvfrom(bytes_amount)
+        
+        try:
+            seq_num_int = int(seq_num[0])
+        except Exception:
+            datagram_count_out = datagram_count_out_old
+            continue
+        # print(seq_num_int)
+        # print('datagram_count_out_old ', datagram_count_out_old)
+        # print('datagrams_amount ', datagrams_amount)
+        # print('seq_num_int ', seq_num_int)
+        # print('datagram_count_out ', datagram_count_out)
+        if 99999 - datagram_count_out_old < datagrams_amount and seq_num_int >= 0 and seq_num_int < datagrams_amount - (99999 - datagram_count_out_old):
+            sent_amount = 99999 - datagrams_amount + 1 + seq_num_int
         else:
-            datagram_count_out += 1
+            sent_amount = seq_num_int - datagram_count_out_old
 
-    seq_num = server.recvfrom(bytes_amount)
-    
-    seq_num_int = int(seq_num[0])
-    # print(seq_num_int)
-    # print('datagram_count_out_old ', datagram_count_out_old)
-    # print('datagrams_amount ', datagrams_amount)
-    # print('seq_num_int ', seq_num_int)
-    # print('datagram_count_out ', datagram_count_out)
-    if 99999 - datagram_count_out_old < datagrams_amount and seq_num_int >= 0 and seq_num_int < datagrams_amount - (99999 - datagram_count_out_old):
-        sent_amount = 99999 - datagrams_amount + 1 + seq_num_int
-    else:
-        sent_amount = seq_num_int - datagram_count_out_old
-
-    if datagram_count_out == int(seq_num[0]):
-        datagram_count_out = int(seq_num[0])
-        # print('finish ', datagram_count_out)
-        return True, sent_amount
-    else:
-        # print('finish ', datagram_count_out)
-        return False, sent_amount
+        if datagram_count_out == int(seq_num[0]):
+            datagram_count_out = int(seq_num[0])
+            # print('finish ', datagram_count_out)
+            return True, sent_amount
+        else:
+            # print('finish ', datagram_count_out)
+            return False, sent_amount
 
 
 def udp_recv(bytes_amount, timeout, datagrams_amount):
