@@ -72,11 +72,14 @@ def download(addr, file_name):
     while (1):
         try:
             if (current_pos >= size):
-                server.sendto(b"EOF", addr)
+                # server.sendto(b"EOF", addr)
+                udp_send("EOF", addr, 1024, 1)
                 break
             else:
                 data_file = f.read(UDP_BUFFER_SIZE)
-                server.sendto(data_file, addr)
+                # server.sendto(data_file, addr)
+                udp_send(data_file, addr, 1024, 1)
+                
                 current_pos = current_pos + UDP_BUFFER_SIZE
                 f.seek(current_pos)
                 total_size+=len(data_file)
@@ -138,10 +141,10 @@ def get_data():
 
 def send_data(addr, data):
     # server.sendto(str(data).encode('utf-8'), addr)
-    udp_send(str(data), addr, 1024, 1)
+    udp_send(str(data).encode('utf-8'), addr, 1024, 1)
 
 def send_status(addr, request, status):
-    message = str("" + request + " " + str(status))
+    message = str("" + request + " " + str(status)).encode('utf-8')
     udp_send(message, addr, 1024, 1)
     # send_data(addr, message)
 
@@ -175,6 +178,7 @@ def handle_client_request(addr, request):
         exit_client(addr)
 
     else:
+        print('bbbbb')
         send_status_and_message(addr, command, SERVER_ERROR, "Unknown command")
 
 
@@ -183,11 +187,11 @@ def exit_client(addr):
 
 def send_time(addr):
     server_time = "Server time: " + str(datetime.datetime.now().time())[:19]
-    udp_send(server_time, addr=addr, bytes_amount=len(server_time), datagrams_amount=1)
+    udp_send(server_time.encode('utf-8'), addr=addr, bytes_amount=len(server_time), datagrams_amount=1)
     # send_data(addr, server_time)
 
 def echo(addr, body):
-    udp_send(body, addr=addr, bytes_amount=len(body), datagrams_amount=1)
+    udp_send(body.encode('utf-8'), addr=addr, bytes_amount=len(body), datagrams_amount=1)
     # send_data(addr, body)
 
 def send_status_and_message(addr, request, status, message):
@@ -212,12 +216,12 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
     datagram_count_out_old = datagram_count_out
     print('Send')
     print('start ', datagram_count_out)
-    data_part = str()
+    data_part = bytes()
     for i in range(datagrams_amount):
-        temp = format(datagram_count_out, '05d')
+        temp = format(datagram_count_out, '05d').encode('utf-8')
         print('===iteration ', i)
         data_part = data[:bytes_amount]
-        data_part = str.encode(temp + data_part)
+        data_part = temp + data_part
         print(data_part)
         print(data)
         server.sendto(data_part, addr)
