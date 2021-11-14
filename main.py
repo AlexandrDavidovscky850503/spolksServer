@@ -347,6 +347,7 @@ class TCPServer:
 #============================= UDP START ===================================
 clients_addr = []
 waiting_clients = []
+DOWNLOAD_PROGRESS = 0
 OK_STATUS = 200
 SERVER_ERROR = 500
 UDP_BUFFER_SIZE = 1024
@@ -432,9 +433,9 @@ def download(addr, file_name):
         except KeyboardInterrupt:
             f.close()
             server.close()
-            os._exit(1)
             progress.close()
-
+            os._exit(1)
+            
     progress.close()
     print("END")
     if(total_size == size):
@@ -442,9 +443,75 @@ def download(addr, file_name):
     f.close()
 
 
-# def upload(file_name):
+def upload(addr, file_name):
+    print('upl')
+    global DOWNLOAD_PROGRESS
+    size = int(get_data()[0])
+    total_size = 0
+    print("size = ")
+    print(size)
+    send_data(addr, DOWNLOAD_PROGRESS)
     
-    
+    data_size_recv = int(get_data()[0])
+    print("data_size_recv = ")
+    print(data_size_recv)
+    file_name = os.path.basename(file_name)
+    if (data_size_recv == 0):
+        f = open(file_name, "wb")
+    else:
+        f = open(file_name, "rb+")
+
+    current_pos = data_size_recv
+    print("=====================")
+    i = 0
+
+    progress = tqdm.tqdm(range(int(size)), f"Progress of {file_name}:", unit="B", unit_scale=True,
+                         unit_divisor=1024)
+    progress.update(total_size)
+
+    while (1):
+        try:
+            # data = client.recvfrom(UDP_BUFFER_SIZE)[0]
+            # print('bbbbbbbb')
+            data, address, a = udp_recv(1029, None, UDP_DATAGRAMS_AMOUNT)
+            if data:
+                if data == b'EOF':
+                    break
+                else:
+                    i += 1
+                    f.seek(current_pos, 0)
+                    f.write(data)
+                    current_pos += len(data)
+                    # server_window = server_window - len(data)
+                    # if (server_window == 0):
+                    #     server_window = WINDOW_SIZE
+                        # send_data(current_pos)
+                total_size+=len(data)
+                progress.update(len(data))
+                # print(total_size)
+                if total_size == size:
+                    break
+            
+            else:
+                print("Server disconnected")
+                return
+
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt was handled")
+            send_data(addr, "ERROR")
+            f.close()
+            server.close()
+            progress.close()
+            os._exit(1)
+            # progress.close()
+    progress.close()
+    print("END")
+    if size == total_size:
+        print("\n" + file_name + " was uploaded")
+    f.close()
+
+
+
 
 
 def save_to_waiting_clients(addr, command, file_name, progress):
@@ -496,6 +563,12 @@ def handle_client_request(addr, request):
         else:
             # no_file = "File: " + params + " is not exist."
             send_status_and_message(addr, command, SERVER_ERROR, "No such file")
+
+
+    if (command == "upload"):
+        print(params)
+        send_status(addr, command, OK_STATUS) #==
+        upload(addr, params)
 
 
     elif (command == "echo"):
