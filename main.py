@@ -441,6 +441,12 @@ def download(addr, file_name):
         print("All")
     f.close()
 
+
+# def upload(file_name):
+    
+    
+
+
 def save_to_waiting_clients(addr, command, file_name, progress):
     waiting_clients.append(
         {
@@ -544,7 +550,9 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
     # print('Send')
     # print('start ', datagram_count_out)
     data_part = bytes()
+    data_temp = bytes(data)
     while(True):
+        data = bytes(data_temp)
         for i in range(datagrams_amount):
             temp = format(datagram_count_out, '05d').encode('utf-8')
             # print('===iteration ', i)
@@ -582,8 +590,13 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
             # print('finish ', datagram_count_out)
             return True, sent_amount
         else:
+            datagram_count_out = int(seq_num[0])
+            i = int(seq_num[0]) - datagram_count_out_old
+            datagram_count_out_old = int(seq_num[0])
+            data_temp[i * bytes_amount:]
             # print('finish ', datagram_count_out)
-            return False, sent_amount
+            # return False, sent_amount
+            continue
 
 
 def udp_recv(bytes_amount, timeout, datagrams_amount):
