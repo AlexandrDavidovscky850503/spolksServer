@@ -572,6 +572,7 @@ def handle_client_request(addr, request):
 
 
     elif (command == "echo"):
+        
         # send_status(addr, command, OK_STATUS)
         echo(addr, params)
 
@@ -593,11 +594,11 @@ def exit_client(addr):
 
 def send_time(addr):
     server_time = "Server time: " + str(datetime.datetime.now().time())[:19]
-    udp_send(server_time.encode('utf-8'), addr=addr, bytes_amount=len(server_time), datagrams_amount=1)
+    udp_send(server_time.encode('utf-8'), addr=addr, bytes_amount=1024, datagrams_amount=1)
     # send_data(addr, server_time)
 
 def echo(addr, body):
-    udp_send(body.encode('utf-8'), addr=addr, bytes_amount=len(body), datagrams_amount=1)
+    udp_send(body.encode('utf-8'), addr=addr, bytes_amount=1024, datagrams_amount=1)
     # send_data(addr, body)
 
 def send_status_and_message(addr, request, status, message):
@@ -620,7 +621,7 @@ def get_data_from_client():
 def udp_send(data, addr, bytes_amount, datagrams_amount):
     global datagram_count_out
     datagram_count_out_old = datagram_count_out
-    # print('Send')
+    print('Send')
     # print('start ', datagram_count_out)
     data_part = bytes()
     data_temp = bytes(data)
@@ -628,7 +629,7 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
         data = bytes(data_temp)
         for i in range(datagrams_amount):
             temp = format(datagram_count_out, '05d').encode('utf-8')
-            # print('===iteration ', i)
+            print('===iteration ', i)
             data_part = data[:bytes_amount]
             data_part = temp + data_part
             # print(data_part)
@@ -641,11 +642,13 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
             else:
                 datagram_count_out += 1
 
-        seq_num = server.recvfrom(bytes_amount)
+        seq_num = server.recvfrom(5)
         
         try:
+            print(seq_num[0])
             seq_num_int = int(seq_num[0])
         except Exception:
+            
             datagram_count_out = datagram_count_out_old
             continue
         # print(seq_num_int)
@@ -659,6 +662,7 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
             sent_amount = seq_num_int - datagram_count_out_old
 
         if datagram_count_out == int(seq_num[0]):
+            print('BBBB')
             datagram_count_out = int(seq_num[0])
             # print('finish ', datagram_count_out)
             return True, sent_amount
@@ -674,7 +678,7 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
 
 def udp_recv(bytes_amount, timeout, datagrams_amount):
     global datagram_count_in 
-    print('Recv')
+    # print('Recv')
     print('start ', datagram_count_in)
     # datagram_count_in_temp = datagram_count_in
     # error_flag = False
@@ -694,27 +698,27 @@ def udp_recv(bytes_amount, timeout, datagrams_amount):
         buffer.append(bytes())
 
     for i in range(datagrams_amount):
-        print('===iteration ', i)
+        # print('===iteration ', i)
         try:
             data_temp, addr = server.recvfrom(bytes_amount)
             recv_flag = True
-            print(data_temp)
+            # print(data_temp)
             seq_num_str = data_temp[:5]
             seq_num = int(seq_num_str)
-            print('seq_num', seq_num)
+            # print('seq_num', seq_num)
         except Exception:
-            print('bbbbbb')
+            # print('bbbbbb')
             exc_flag = True
             break
         # if not error_flag:
         
-        print('seq_num', seq_num)
+        # print('seq_num', seq_num)
         if 99999 - datagram_count_in < datagrams_amount and seq_num >= 0 and seq_num < datagrams_amount - (99999 - datagram_count_in) - 1:
             seq_num_temp = 99999 + 1 + seq_num
         else:
             seq_num_temp = seq_num
-        print('datagram_count_in', datagram_count_in)
-        print('datagrams_amount', datagrams_amount)
+        # print('datagram_count_in', datagram_count_in)
+        # print('datagrams_amount', datagrams_amount)
 
         if seq_num_temp >= datagram_count_in and seq_num_temp < datagram_count_in + datagrams_amount:
             recv_flags[seq_num_temp - datagram_count_in] = not recv_flags[seq_num_temp - datagram_count_in]
@@ -725,8 +729,8 @@ def udp_recv(bytes_amount, timeout, datagrams_amount):
 
             # print(datagram_count_in_temp)
             # data += data_temp
-        print(recv_flags)
-        print(buffer)
+        # print(recv_flags)
+        # print(buffer)
     
     if all(b==True for b in recv_flags):
         for i in range(datagrams_amount):
