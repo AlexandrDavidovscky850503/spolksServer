@@ -675,21 +675,23 @@ def udp_send1(data, addr, bytes_amount, datagrams_amount):
 
 def udp_send(data, addr, bytes_amount, datagrams_amount):
     global datagram_count_out
-    datagram_count_out_old = datagram_count_out
+    datagram_count_out_old = int(datagram_count_out)
     # print('Send')
     # print('start ', datagram_count_out)
     data_part = bytes()
     data_temp = bytes(data)
+    i_temp = 0
     while(True):
         data = bytes(data_temp)
         # print('A2A2', datagram_count_out)
-        for i in range(datagrams_amount):
+        for i in range(i_temp, datagrams_amount):
             temp = format(datagram_count_out, '05d').encode('utf-8')
             # print('===iteration ', i)
             data_part = data[:bytes_amount]
             data_part = temp + data_part
             # print(temp)
             # print(data)
+            # print(f's {i} _ {temp}')
             server.sendto(data_part, addr)
             data = data[bytes_amount:]
             # datagram_count_out += 1
@@ -726,10 +728,10 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
             return True, sent_amount
         else:
             datagram_count_out = int(seq_num[0])
-            datagrams_amount = datagram_count_out - datagram_count_out_old
-            i = int(seq_num[0]) - datagram_count_out_old
+            # datagrams_amount = datagram_count_out - datagram_count_out_old
+            i_temp = int(seq_num[0]) - datagram_count_out_old
             datagram_count_out_old = int(seq_num[0])
-            data_temp[i * bytes_amount:]
+            data_temp[i_temp * bytes_amount:]
             
             # print('finish ', datagram_count_out)
             # return False, sent_amount
