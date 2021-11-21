@@ -6,7 +6,7 @@ import time
 
 MAX_QUERY_SIZE = 1
 
-SOCKET_PORT = 50015
+SOCKET_PORT = 50016
 SOCKET_HOST = 'localhost'
 # SOCKET_HOST = '192.168.191.24'
 CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
@@ -90,6 +90,7 @@ class TCPServer:
         sock = socket.socket(socket.AF_INET,
                              socket.SOCK_STREAM)  # создать TCP-сокет семейства AF_INET типа потоковый сокет
         #  устанавливает значение опции сокета
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 8)
         # Время (в секундах) простоя (idle) соединения, по прошествии которого TCP начнёт отправлять проверочные пакеты (keepalive probes), если для сокета включён параметр SO_KEEPALIVE
@@ -350,9 +351,9 @@ waiting_clients = []
 DOWNLOAD_PROGRESS = 0
 OK_STATUS = 200
 SERVER_ERROR = 500
-UDP_BUFFER_SIZE = 2048
+UDP_BUFFER_SIZE = 48000
 UDP_WINDOW_SIZE = 4096
-UDP_DATAGRAMS_AMOUNT = 50
+UDP_DATAGRAMS_AMOUNT = 5
 
 datagram_count_in = 0
 datagram_count_out = 0
@@ -701,7 +702,9 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
                 datagram_count_out += 1
 
         # print('A0A0', datagram_count_out)
+        server.settimeout(15)
         seq_num = server.recvfrom(5)
+        server.settimeout(None)
         # print('A1A1', seq_num)
         
         try:
