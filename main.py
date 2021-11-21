@@ -411,7 +411,7 @@ def download(addr, file_name):
                 current_pos = current_pos + UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT
                 f.seek(current_pos)
                 total_size+=len(data_file)
-                print('upd')
+                # print('upd')
                 progress.update(len(data_file))
                 # print(total_size)
                 if total_size == size:
@@ -682,12 +682,13 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
     data_temp = bytes(data)
     while(True):
         data = bytes(data_temp)
+        # print('A2A2', datagram_count_out)
         for i in range(datagrams_amount):
             temp = format(datagram_count_out, '05d').encode('utf-8')
             # print('===iteration ', i)
             data_part = data[:bytes_amount]
             data_part = temp + data_part
-            # print(data_part)
+            # print(temp)
             # print(data)
             server.sendto(data_part, addr)
             data = data[bytes_amount:]
@@ -697,12 +698,12 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
             else:
                 datagram_count_out += 1
 
-        print('A0A0', datagram_count_out)
+        # print('A0A0', datagram_count_out)
         seq_num = server.recvfrom(5)
-        # print('A1A1')
+        # print('A1A1', seq_num)
         
         try:
-            print(seq_num[0])
+            # print(seq_num[0])
             seq_num_int = int(seq_num[0])
         except Exception:
             
@@ -725,9 +726,11 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
             return True, sent_amount
         else:
             datagram_count_out = int(seq_num[0])
+            datagrams_amount = datagram_count_out - datagram_count_out_old
             i = int(seq_num[0]) - datagram_count_out_old
             datagram_count_out_old = int(seq_num[0])
             data_temp[i * bytes_amount:]
+            
             # print('finish ', datagram_count_out)
             # return False, sent_amount
             continue
