@@ -354,6 +354,7 @@ SERVER_ERROR = 500
 UDP_BUFFER_SIZE = 32768
 UDP_WINDOW_SIZE = 4096
 UDP_DATAGRAMS_AMOUNT = 5
+LAST_CLIENT_ID = 0
 
 datagram_count_in = 0
 datagram_count_out = 0
@@ -598,11 +599,19 @@ def handle_client_request(addr, request):
     elif (command == "exit"):
         # send_status(addr, command, OK_STATUS)
         exit_client(addr)
+    elif (command == "connect"):
+        # send_status(addr, command, OK_STATUS)
+        connect_new_client(addr, params)
+
 
     else:
         print('bbbbb')
         send_status_and_message(addr, command, SERVER_ERROR, "Unknown command")
 
+def connect_new_client(addr, params):
+    global LAST_CLIENT_ID
+    add_client_address(addr)
+    LAST_CLIENT_ID = int(params)
 
 def exit_client(addr):
     clients_addr.remove(addr)
@@ -773,6 +782,7 @@ def udp_recv(bytes_amount, timeout, datagrams_amount, recv_flags, buffer):
     # print(recv_flags)
     global clients_addr
     global datagram_count_in
+    global datagram_count_out
     datagram_count_in_old = datagram_count_in 
     datagram_count_in_begin = datagram_count_in 
     # print('Recv')
@@ -781,11 +791,13 @@ def udp_recv(bytes_amount, timeout, datagrams_amount, recv_flags, buffer):
     # error_flag = False
     exc_flag = False
     recv_flag = False
+    new_client_flag = False
     aaa = False
     server.settimeout(timeout)
     tim1 = timeout if timeout == None else 0.001
     tim2 = timeout if timeout == None else 1
     data = bytes()
+    data_temp2 = str()
     req = 0
 
     i_temp = 0
@@ -813,7 +825,11 @@ def udp_recv(bytes_amount, timeout, datagrams_amount, recv_flags, buffer):
                 
                 # print('===iteration ', i)
                 recv_flag = True
-                # print(data_temp)
+                data_temp2 = data_temp.decode('utf-8') 
+                if data_temp2[0] == 'g':
+                    print('New client connected')
+                    data_temp = data_temp[1:]
+                    new_client_flag = True
                 seq_num_str = data_temp[:5]
                 # print(seq_num_str)
                 seq_num = int(seq_num_str)
@@ -836,19 +852,25 @@ def udp_recv(bytes_amount, timeout, datagrams_amount, recv_flags, buffer):
             # if not error_flag:
             
             # print('seq_num', seq_num)
-            if 99999 - datagram_count_in < datagrams_amount and seq_num >= 0 and seq_num < datagrams_amount - (99999 - datagram_count_in) - 1:
-                print('A')
-                seq_num_temp = 99999 + 1 + seq_num
-            else:
-                seq_num_temp = seq_num
-            # print('datagram_count_in', datagram_count_in)
-            # print('datagrams_amount', datagrams_amount)
+            if new_client_flag:
+                recv_flags[0] = True
+                buffer[0] = bytes(data_temp[5:])
+                datagram_count_in = seq_num + 1
+                datagram_count_out = 0
 
-            if seq_num_temp >= datagram_count_in and seq_num_temp < datagram_count_in_begin + datagrams_amount:
-                # print(seq_num_temp - datagram_count_in_begin)
-                recv_flags[seq_num_temp - datagram_count_in_begin] = True
-                buffer[seq_num_temp - datagram_count_in_begin] = bytes(data_temp[5:])
+            else:   
+                if 99999 - datagram_count_in < datagrams_amount and seq_num >= 0 and seq_num < datagrams_amount - (99999 - datagram_count_in) - 1:
+                    print('A')
+                    seq_num_temp = 99999 + 1 + seq_num
+                else:
+                    seq_num_temp = seq_num
+                # print('datagram_count_in', datagram_count_in)
+                # print('datagrams_amount', datagrams_amount)
 
+                if seq_num_temp >= datagram_count_in and seq_num_temp < datagram_count_in_begin + datagrams_amount:
+                    # print(seq_num_temp - datagram_count_in_begin)
+                    recv_flags[seq_num_temp - datagram_count_in_begin] = True
+                    buffer[seq_num_temp - datagram_count_in_begin] = bytes(data_temp[5:])
             i += 1
 
         if all(recv_flags[i]==True for i in range(i_temp, datagrams_amount)):
@@ -859,11 +881,12 @@ def udp_recv(bytes_amount, timeout, datagrams_amount, recv_flags, buffer):
                 recv_flags[j] = False
                 data += buffer[j]
                 counter += 1
-            if datagram_count_in + datagrams_amount > 99999:
-                # print('overflow')
-                datagram_count_in = datagrams_amount - (99999 - datagram_count_in) - 1
-            else:
-                datagram_count_in += datagrams_amount
+            if not new_client_flag:
+                if datagram_count_in + datagrams_amount > 99999:
+                    # print('overflow')
+                    datagram_count_in = datagrams_amount - (99999 - datagram_count_in) - 1
+                else:
+                    datagram_count_in += datagrams_amount
 
             # print('aaaaa1')
             temp = format(datagram_count_in, '05d')
@@ -1035,6 +1058,6 @@ elif num == 1:
     while True:
         request, addr = get_data_from_client()
 
-        add_client_address(addr)
+        # add_client_address(addr)
         print("get a command: ", request)
         handle_client_request(addr, request)
