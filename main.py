@@ -467,6 +467,13 @@ def upload(addr, file_name):
     print("=====================")
     i = 0
 
+    recv_flags = []
+    buffer = []
+    for i in range(UDP_DATAGRAMS_AMOUNT):
+        recv_flags.append(False)
+        # seq_nums.append(0)
+        buffer.append(bytes())
+
     progress = tqdm.tqdm(range(int(size)), f"Progress of {file_name}:", unit="B", unit_scale=True,
                          unit_divisor=1024)
     progress.update(total_size)
@@ -475,7 +482,7 @@ def upload(addr, file_name):
         try:
             # data = client.recvfrom(UDP_BUFFER_SIZE)[0]
             # print('bbbbbbbb')
-            data, address, a = udp_recv(UDP_BUFFER_SIZE + 5, None, UDP_DATAGRAMS_AMOUNT)
+            data, address, a = udp_recv(UDP_BUFFER_SIZE + 5, None, UDP_DATAGRAMS_AMOUNT, recv_flags, buffer)
             if data:
                 if data == b'EOF':
                     break
@@ -712,6 +719,15 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
                 datagram_count_out = 0
             else:
                 datagram_count_out += 1
+
+            try:
+                server.settimeout(0)
+                seq_num = server.recvfrom(5)
+                server.settimeout(None) 
+                break
+                   
+            except Exception:
+                pass
 
         # print('A0A0', datagram_count_out)
         server.settimeout(15)
