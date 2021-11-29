@@ -9,7 +9,7 @@ import time
 STORAGE_DIR = 'storage'
 IP = ''
 
-PORT = 19001
+PORT = 19012
 BUFFER_SIZE = 1024
 
 TIMEOUT = 20
@@ -61,6 +61,11 @@ def handle_client_request(client, request):
             download(client, params)
         else:
             send_status_and_message(client['socket'], command, SERVER_ERROR, "No such file")
+
+    if command == "upload":
+        send_status(client['socket'], command, OK_STATUS)
+        upload(client, params)
+
 
     elif command == "echo":
         send_status(client['socket'], command, OK_STATUS)
@@ -127,8 +132,53 @@ def get_data(client):
 def send_data(client, data):
     client['socket'].send(str(data).encode('utf-8'))
 
+def upload(client, file_name):
+    size = int(get_data(client))
+    print("size = ", size)
+    send_ok(client)
+
+    data_size_recv = get_data(client)
+    if (data_size_recv):
+        data_size_recv = int(data_size_recv)
+
+    waiting_client = search_by_ip(waiting_clients, client['ip'])
+    if (len(waiting_clients) > 0 and waiting_client != False):
+        waiting_clients.remove(waiting_client)
+
+    if (waiting_client):
+        if (waiting_client['file_name'] == file_name and waiting_client['command'] == 'upload'):
+            data_size_recv = int(waiting_client['progress'])
+            #print("data_size_recv (progress) = ",data_size_recv)
+            send_data(client, data_size_recv)
+    else:
+        send_data(client, data_size_recv)
+
+    send_ok(client)
+    if (data_size_recv == 0):
+        f = open(file_name, "wb")
+    else:
+        f = open(file_name, "rb+")
+    f.seek(data_size_recv, 0)
+    print("Start uploading")
+    while (data_size_recv < size):
+        try:
+            data = client['socket'].recv(BUFFER_SIZE)
+            f.write(data)
+            data_size_recv += len(data)
+            # print("data_size_recv",data_size_recv)
+            client['socket'].settimeout(0.0001)
+            f.seek(data_size_recv, 0)
+
+        except socket.error as e:
+            f.close()
+            handle_disconnect(client, "upload", file_name, data_size_recv)
+            client['is_closed'] = True
+            return
+    print("Upload finished")
+    f.close()
+
 def download(client, file_name):
-    obj_download = "C:/Users/xiaom/PycharmProjects/serv2/storage/"+file_name
+    obj_download = storage_path +'/'+file_name
     obj_download.encode('unicode_escape')
     f = open(obj_download, "rb+")
     size = int(os.path.getsize(obj_download))
