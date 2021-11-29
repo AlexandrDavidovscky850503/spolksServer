@@ -42,7 +42,6 @@ def send_time(client):
 
 def exit_client(client):
     global inputs
-    print('exitexit')
     inputs.remove(client['socket'])
     clients_pool.remove(client)
     client['is_closed'] = True
@@ -215,8 +214,9 @@ def continue_upload(found_client, request):
             data = found_client['socket'].recv(BUFFER_SIZE)
             found_client['data_size_recv'] += len(data)
             f.write(data)
+            found_client['socket'].send("OK".encode('utf-8'))
             if found_client['data_size_recv'] == size:
-                print(f.name, "was downloaded")
+                print(f.name, "was uploaded")
                 found_client['is_uploading'] = False
                 found_client['data_size_recv'] = 0
                 found_client['file_size'] = 0
@@ -232,7 +232,7 @@ def continue_upload(found_client, request):
             found_client.socket.close()
             os._exit(1)
     else:
-        print(f.name, "was downloaded")
+        print(f.name, "was uploaded")
         found_client['is_uploading'] = False
         found_client['data_size_recv'] = 0
         found_client['file_size'] = 0
@@ -279,8 +279,9 @@ def upload(client, file_name):
             # print("data_size_recv",data_size_recv)
             client['socket'].settimeout(0.0001)
             f.seek(data_size_recv, 0)
+            client['socket'].send("OK".encode('utf-8'))
             if data_size_recv == size:
-                print(f.name, "was downloaded")
+                print(f.name, "was uploaded")
                 found_client['is_uploading'] = False
                 found_client['data_size_recv'] = 0
                 found_client['file_size'] = 0
@@ -309,7 +310,7 @@ server.bind((IP, PORT))
 server.listen(1)
 server.setblocking(0)
 
-print("Hello, listened on %s:%d" %(IP, PORT))
+print("Hello, listening on %s:%d" %(IP, PORT))
 
 clients_pool = []
 waiting_clients = []
