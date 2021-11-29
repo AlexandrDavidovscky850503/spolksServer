@@ -9,7 +9,7 @@ import time
 STORAGE_DIR = 'storage'
 IP = ''
 
-PORT = 19001
+PORT = 20002
 BUFFER_SIZE = 1024
 
 TIMEOUT = 20
@@ -42,7 +42,7 @@ def send_time(client):
 
 def exit_client(client):
     global inputs
-
+    print('exitexit')
     inputs.remove(client['socket'])
     clients_pool.remove(client)
     client['is_closed'] = True
@@ -100,6 +100,7 @@ def save_to_waiting_clients(ip, command, file_name, progress):
         })
 
 def handle_disconnect(client, command, file_name, progress):
+    print('dis')
     save_to_waiting_clients(client['ip'], command, file_name, progress)
     clients_pool.remove(client)
     inputs.remove(client['socket'])
@@ -133,7 +134,7 @@ def send_data(client, data):
     client['socket'].send(str(data).encode('utf-8'))
 
 def download(client, file_name):
-    obj_download = "C:/Users/xiaom/PycharmProjects/serv2/storage/"+file_name
+    obj_download = storage_path +'/'+file_name
     obj_download.encode('unicode_escape')
     f = open(obj_download, "rb+")
     size = int(os.path.getsize(obj_download))
@@ -205,34 +206,46 @@ def continue_download(client, received_data):
         f.close()
 
 def continue_upload(found_client, request):
-    data_size_recv = int(received_data)
-    f = client['file']
-    size = int(os.path.getsize(f.name))
+    data_size_recv = int(found_client['data_size_recv'])
+    f = found_client['file']
+    size = found_client['size']
     if (data_size_recv < size):
         f.seek(data_size_recv)
         try:
-            data_file = f.read(BUFFER_SIZE)
-            client['socket'].sendall(data_file)
+            data = found_client['socket'].recv(BUFFER_SIZE)
+            found_client['data_size_recv'] += len(data)
+            f.write(data)
+            if found_client['data_size_recv'] == size:
+                print(f.name, "was downloaded")
+                found_client['is_uploading'] = False
+                found_client['data_size_recv'] = 0
+                found_client['file_size'] = 0
+                f.close()
         except socket.error as e:
             f.close()
-            handle_disconnect(client, "download", f.name, data_size_recv)
-            client['is_closed'] = True
+            handle_disconnect(found_client, "download", f.name, data_size_recv)
+            found_client['is_closed'] = True
             return
 
         except KeyboardInterrupt:
             server.close()
-            client.socket.close()
+            found_client.socket.close()
             os._exit(1)
     else:
         print(f.name, "was downloaded")
-        client['is_downloading'] = False
+        found_client['is_uploading'] = False
+        found_client['data_size_recv'] = 0
+        found_client['file_size'] = 0
         f.close()
+
 def upload(client, file_name):
     size = int(get_data(client))
-    print("size = ", size)
-    send_ok(client)
+    client['size'] = size
 
+    print("size =", size)
+    send_ok(client)
     data_size_recv = get_data(client)
+
     if (data_size_recv):
         data_size_recv = int(data_size_recv)
 
@@ -248,28 +261,38 @@ def upload(client, file_name):
     else:
         send_data(client, data_size_recv)
 
-    send_ok(client)
+    # send_ok(client)
     if (data_size_recv == 0):
         f = open(file_name, "wb")
     else:
         f = open(file_name, "rb+")
     f.seek(data_size_recv, 0)
     print("Start uploading")
-    # client['is_uploading'] = True
-    # client['file'] = f
+    client['is_uploading'] = True
+    client['file'] = f
     while (data_size_recv < size):
         try:
             data = client['socket'].recv(BUFFER_SIZE)
             f.write(data)
             data_size_recv += len(data)
+            client['data_size_recv'] = data_size_recv
             # print("data_size_recv",data_size_recv)
             client['socket'].settimeout(0.0001)
             f.seek(data_size_recv, 0)
-            #return
+            if data_size_recv == size:
+                print(f.name, "was downloaded")
+                found_client['is_uploading'] = False
+                found_client['data_size_recv'] = 0
+                found_client['file_size'] = 0
+                f.close()
+            return
         except socket.error as e:
             f.close()
             handle_disconnect(client, "upload", file_name, data_size_recv)
             client['is_closed'] = True
+            found_client['is_uploading'] = False
+            found_client['data_size_recv'] = 0
+            found_client['file_size'] = 0
             return
     print("Upload finished")
     f.close()
@@ -296,9 +319,7 @@ inputs = [server]
 client_ID = 0
 
 while True:
-
     inputready,outputready,exceptready = select.select(inputs,[], inputs)
-
     for ready_socket in inputready:
         if ready_socket == server:
             client, client_info = server.accept()
@@ -317,6 +338,8 @@ while True:
                             "port": client_port,
                             "is_downloading": False,
                             "is_uploading": False,
+                            "data_size_recv": 0,
+                            "file_size": 0,
                             "file": ''
                         }
 
@@ -327,20 +350,25 @@ while True:
 
         else:
             try:
-                request = ready_socket.recv(BUFFER_SIZE).decode('utf-8')
+                # request = ready_socket.recv(BUFFER_SIZE).decode('utf-8')
+                
+                # print(request)
+                # request = request.decode('utf-8')
                 found_client = search_by_socket(clients_pool, ready_socket)
                 if found_client['is_downloading']:
+                    request = ready_socket.recv(BUFFER_SIZE)
                     continue_download(found_client, request)
                 elif found_client['is_uploading']:
                     continue_upload(found_client, request)
-
-                elif request:
-                    request = request.strip()
-                    if request != '':
-                        print("[*] Received: %s" % request)
-                        handle_client_request(found_client, request)
                 else:
-                    exit_client(found_client)
+                    request = ready_socket.recv(BUFFER_SIZE).decode('utf-8')
+                    if request:
+                        request = request.strip()
+                        if request != '':
+                            print("[*] Received: %s" % request)
+                            handle_client_request(found_client, request)
+                    else:
+                        exit_client(found_client)
             except ConnectionResetError:
                 found_client = search_by_socket(clients_pool, ready_socket)
                 print("[*] Connection with: %s:%d is closed" % (found_client['ip'], found_client['port']))
