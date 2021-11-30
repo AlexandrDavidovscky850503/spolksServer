@@ -353,7 +353,6 @@ DOWNLOAD_PROGRESS = 0
 OK_STATUS = 200
 SERVER_ERROR = 500
 UDP_BUFFER_SIZE = 32768
-UDP_WINDOW_SIZE = 4096
 UDP_DATAGRAMS_AMOUNT = 15
 LAST_CLIENT_ID = 0
 
@@ -364,7 +363,6 @@ datagram_count_out = 0
 # UDP_SERVER = '-'
 
 def download(addr, file_name):
-    # global UDP_WINDOW_SIZE
     print('=Download=')
 
     f = open(file_name, "rb+")
@@ -374,42 +372,22 @@ def download(addr, file_name):
 
     print("File size:", size)
 
-    # client_window = int(get_data()[0])
-
-    # if (UDP_WINDOW_SIZE > client_window):
-    #     UDP_WINDOW_SIZE = client_window
-
-    # send_data(addr, UDP_WINDOW_SIZE)
-
     send_data(addr, size)
 
     data_size_recv = int(get_data()[0])
 
-    # waiting_client = search_by_addr(waiting_clients, addr) # ==
-    # if (len(waiting_clients) > 0 and waiting_client != False and waiting_client["file_name"] == file_name and
-    #             waiting_client['command'] == 'download'):
-    #     waiting_clients.remove(waiting_client)
-    #     data_size_recv = int(waiting_client['progress'])
-
     # send_data(addr, data_size_recv)
 
     f.seek(data_size_recv, 0)
-
     current_pos = data_size_recv
 
-    # print("current_pos = ")
-    # print(current_pos)
     progress = tqdm.tqdm(range(int(size)), f"Progress of {file_name}:", unit="B", unit_scale=True,
                          unit_divisor=1024)
 
     progress.update(total_size)
-    while (1):
+    while 1:
         try:
-            if (current_pos >= size):
-                # server.sendto(b"EOF", addr)
-                udp_send("EOF", addr, UDP_BUFFER_SIZE, UDP_DATAGRAMS_AMOUNT)
-                break
-            else:
+            if 1:
                 data_file = f.read(UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT)
                 # server.sendto(data_file, addr)
                 udp_send(data_file, addr, UDP_BUFFER_SIZE, UDP_DATAGRAMS_AMOUNT)
@@ -422,21 +400,6 @@ def download(addr, file_name):
                 # print(total_size)
                 if total_size == size:
                     break
-
-            # client_window = client_window - UDP_BUFFER_SIZE
-            # if (client_window == 0):
-
-            #     # received_data = get_data()[0]
-            #     client_window = UDP_WINDOW_SIZE
-
-            #     if (received_data == "ERROR"):
-            #         handle_disconnect(addr, "download", file_name, data_size_recv)
-            #         break
-            #     else:
-            #         data_size_recv = int(received_data)
-
-
-
         except Exception:
             current_pos = current_pos + UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT
             total_size += len(data_file)
@@ -452,7 +415,7 @@ def download(addr, file_name):
 
     progress.close()
     print("END")
-    if (total_size == size):
+    if total_size == size:
         print("All")
     f.close()
 
@@ -465,15 +428,7 @@ def upload(addr, file_name):
     print("size =", size)
     # print(size)
     send_data(addr, DOWNLOAD_PROGRESS)
-
-    # data_size_recv = int(get_data()[0])
-    # print("data_size_recv = ")
-    # print(data_size_recv)
     file_name = os.path.basename(file_name)
-    # if (data_size_recv == 0):
-    #     f = open(file_name, "wb")
-    # else:
-    #     f = open(file_name, "rb+")
 
     f = open(file_name, "wb")
 
@@ -488,14 +443,12 @@ def upload(addr, file_name):
 
     while (1):
         try:
-            # data = client.recvfrom(UDP_BUFFER_SIZE)[0]
-            # print('bbbbbbbb')
             data, address, a = udp_recv(UDP_BUFFER_SIZE + 5, 10.0, UDP_DATAGRAMS_AMOUNT)
-            # data, address, a = udp_recv(UDP_BUFFER_SIZE + 5, None, UDP_DATAGRAMS_AMOUNT, recv_flags, buffer)
             if data:
-                if data == b'EOF':
-                    break
-                else:
+                # if data == b'EOF':
+                #     break
+                # else:
+                if 1:
                     i += 1
                     f.seek(current_pos, 0)
                     f.write(data)
@@ -536,20 +489,8 @@ def save_to_waiting_clients(addr, command, file_name, progress):
         })
 
 
-# def handle_disconnect(client, command, file_name, progress):
-#     save_to_waiting_clients(client, command, file_name, progress)
-#     time.sleep(1)
-#     print("lost connection")
-
-
-# def search_by_addr(list, addr):
-#     found_client = [element for element in list if element['addr'] == addr[0]]
-#     return found_client[0] if len(found_client) > 0 else False
-
-
 def get_data():
     data, address, a = udp_recv(UDP_BUFFER_SIZE, None, 1)
-    # data, address, a = udp_recv(UDP_BUFFER_SIZE, None, 1, recv_flags, buffer)
     data = data.decode('utf-8')
     return [data, address]
 
@@ -571,43 +512,36 @@ def handle_client_request(addr, request):
     data = request.split()
     command = data[0]
 
-    if (len(data) == 2):
+    if len(data) == 2:
         params = data[1]
 
     try:
-        if (command == "download"):
+        if command == "download":
             print(params)
-            if (os.path.isfile(params)):  # ==
+            if os.path.isfile(params):  # ==
                 send_status(addr, command, OK_STATUS)  # ==
                 download(addr, params)
             else:
-                # no_file = "File: " + params + " is not exist."
                 send_status_and_message(addr, command, SERVER_ERROR, "No such file")
-
-
-        elif (command == "upload"):
+        elif command == "upload":
             print(params)
             # send_status(addr, command, OK_STATUS)  # ==
             upload(addr, params)
-
-
-        elif (command == "echo"):
+        elif command == "echo":
 
             # send_status(addr, command, OK_STATUS)
             echo(addr, params)
 
-        elif (command == "time"):
+        elif command == "time":
             # send_status(addr, command, OK_STATUS)
             send_time(addr)
 
-        elif (command == "exit"):
+        elif command == "exit":
             # send_status(addr, command, OK_STATUS)
             exit_client(addr)
-        elif (command == "connect"):
+        elif command == "connect":
             # send_status(addr, command, OK_STATUS)
             connect_new_client(addr, params)
-
-
         else:
             print('Unknown command received!')
             send_status_and_message(addr, command, SERVER_ERROR, "Unknown command")
@@ -648,16 +582,8 @@ def add_client_address(addr):
 
 
 def get_data_from_client():
-    # data, address = server.recvfrom(UDP_BUFFER_SIZE)
-    # recv_flags = []
-    # buffer = []
-    # for i in range(1):
-    #     recv_flags.append(False)
-    #     # seq_nums.append(0)
-    #     buffer.append(bytes())
     print('Waiting for command...')
     data, address, a = udp_recv(UDP_BUFFER_SIZE, None, 1, True)
-    # data, address, a = udp_recv(UDP_BUFFER_SIZE, None, 1, recv_flags, buffer)
     # print(data)
     # print(address)
     data = data.decode('utf-8')
@@ -670,8 +596,8 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
     datagram_count_out_begin = int(datagram_count_out)
     data_temp = bytes(data)
     i_temp = 0
-    seq_num = 0
-    while (True):
+    seq_num = (-1, '127.0.0.1')
+    while True:
         # print('A2A2', datagram_count_out)
         for i in range(i_temp, datagrams_amount):
             temp = format(datagram_count_out, '05d').encode('utf-8')
@@ -711,7 +637,7 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
                 raise Exception
 
             # print('A1A1', seq_num)
-        # fl = False
+        fl = False
         server.settimeout(None)
 
         if datagram_count_out_begin + datagrams_amount > 99999:
@@ -740,7 +666,7 @@ def udp_send(data, addr, bytes_amount, datagrams_amount):
 
 
 def udp_recv(bytes_amount, timeout, datagrams_amount, wait_flag = False):
-    print('a')
+    # print('a')
     global clients_addr
     global datagram_count_in
     global datagram_count_out
