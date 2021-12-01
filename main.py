@@ -1,309 +1,30 @@
-import os
+import threading
+import time
 import socket
 import datetime
-import tqdm
-import time
 
-MAX_QUERY_SIZE = 1
+DOWNLOAD_SERVICE_PORT = 50001
+UPLOAD_SERVICE_PORT = 50002
+ECHO_SERVICE_PORT = 50003
+TIME_SERVICE_PORT = 50004
 
-SOCKET_PORT = 50018
-SOCKET_HOST = 'localhost'
-# SOCKET_HOST = '192.168.191.24'
-CONNECTION_DATA = (SOCKET_HOST, SOCKET_PORT)
-BUFFER_SIZE = 1024 * 32
-SEPARATOR = "<SEPARATOR>"
+server_download_sock = None
+server_upload_sock = None
+server_echo_sock = None
+server_time_sock = None
 
-
-# ============================= UDP START ===================================
-clients_addr = []
-waiting_clients = []
-DOWNLOAD_PROGRESS = 0
-OK_STATUS = 200
-SERVER_ERROR = 500
 UDP_BUFFER_SIZE = 32768
 UDP_DATAGRAMS_AMOUNT = 15
-LAST_CLIENT_ID = 0
 
-datagram_count_in = 0
-datagram_count_out = 0
+def create_sock(port_num):
+    new_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    new_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    new_socket.bind(('', port_num))
 
-
-# UDP_SERVER = '-'
-
-def download(addr, file_name):
-    print('=Download=')
-    if os.path.isfile(file_name):
-        send_data(addr, OK_STATUS)
-    else:
-        send_data(addr, SERVER_ERROR)
-        return
-
-    f = open(file_name, "rb+")
-
-    size = int(os.path.getsize(file_name))
-    total_size = 0
-
-    print("File size:", size)
-
-    send_data(addr, size)
-
-    data_size_recv = int(get_data()[0])
-
-    # send_data(addr, data_size_recv)
-
-    f.seek(data_size_recv, 0)
-    current_pos = data_size_recv
-
-    progress = tqdm.tqdm(range(int(size)), f"Progress of {file_name}:", unit="B", unit_scale=True,
-                         unit_divisor=1024)
-
-    progress.update(total_size)
-    while 1:
-        try:
-            if 1:
-                data_file = f.read(UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT)
-                # server.sendto(data_file, addr)
-                udp_send(data_file, addr, UDP_BUFFER_SIZE, UDP_DATAGRAMS_AMOUNT)
-
-                current_pos = current_pos + UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT
-                f.seek(current_pos)
-                total_size += len(data_file)
-                # print('upd')
-                progress.update(len(data_file))
-                # print(total_size)
-                if total_size == size:
-                    break
-        except Exception:
-            current_pos = current_pos + UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT
-            total_size += len(data_file)
-            if total_size == size:
-                print('Ack for last portion was not received. Probably the client was disconnected')
-            else:
-                print('Client disconnected')
-            break
-            # f.close()
-            # server.close()
-            # progress.close()
-            # os._exit(1)
-
-    progress.close()
-    print("END")
-    if total_size == size:
-        print("All")
-    f.close()
+    return new_socket
 
 
-def upload(addr, file_name):
-    print('=File upload=')
-    global DOWNLOAD_PROGRESS
-    size = int(get_data()[0])
-    total_size = 0
-    print("size =", size)
-    # print(size)
-    send_data(addr, DOWNLOAD_PROGRESS)
-    file_name = os.path.basename(file_name)
-
-    f = open(file_name, "wb")
-
-    # current_pos = data_size_recv
-    current_pos = 0
-    # print("=====================")
-    i = 0
-
-    progress = tqdm.tqdm(range(int(size)), f"Progress of {file_name}:", unit="B", unit_scale=True,
-                         unit_divisor=1024)
-    progress.update(total_size)
-
-    while (1):
-        try:
-            data, address, a = udp_recv(UDP_BUFFER_SIZE + 5, 10.0, UDP_DATAGRAMS_AMOUNT)
-            if data:
-                if 1:
-                    i += 1
-                    f.seek(current_pos, 0)
-                    f.write(data)
-                    current_pos += len(data)
-                total_size += len(data)
-                progress.update(len(data))
-                # print(total_size)
-                if total_size == size:
-                    break
-
-            else:
-                print("Client disconnected")
-                return
-
-        except Exception:
-            print("Client disconnected")
-            break
-            # send_data(addr, "ERROR")
-            # f.close()
-            # server.close()
-            # progress.close()
-            # os._exit(1)
-            # progress.close()
-    progress.close()
-    print("END")
-    if size == total_size:
-        print("\n" + file_name + " was uploaded")
-    f.close()
-
-def get_data():
-    data, address, a = udp_recv(UDP_BUFFER_SIZE, None, 1)
-    data = data.decode('utf-8')
-    return [data, address]
-
-def send_data(addr, data):
-    # server.sendto(str(data).encode('utf-8'), addr)
-    print('send data', len(str(data).encode('utf-8')))
-    udp_send(str(data).encode('utf-8'), addr, UDP_BUFFER_SIZE, 1)
-
-def handle_client_request(addr, request):
-    data = request.split()
-    command = data[0]
-
-    if len(data) == 2:
-        params = data[1]
-
-    try:
-        if command == "download":
-            print('File name:', params)
-            download(addr, params)
-        elif command == "upload":
-            print('File name', params)
-            upload(addr, params)
-        elif command == "echo":
-            echo(addr, params)
-        elif command == "time":
-            send_time(addr)
-        elif command == "exit":
-            exit_client(addr)
-        elif command == "connect":
-            connect_new_client(addr, params)
-        else:
-            print('Unknown command received!')
-            send_status_and_message(addr, command, SERVER_ERROR, "Unknown command")
-    except Exception:
-        print('Unable to process the command')
-
-
-def connect_new_client(addr, params):
-    global LAST_CLIENT_ID
-    add_client_address(addr)
-    LAST_CLIENT_ID = int(params)
-
-
-def exit_client(addr):
-    clients_addr.remove(addr)
-
-
-def send_time(addr):
-    server_time = "Server time: " + str(datetime.datetime.now().time())[:19]
-    udp_send(server_time.encode('utf-8'), addr=addr, bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
-    # send_data(addr, server_time)
-
-
-def echo(addr, body):
-    udp_send(body.encode('utf-8'), addr=addr, bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
-    # send_data(addr, body)
-
-
-def send_status_and_message(addr, request, status, message):
-    message = str("" + request + " " + str(status) + " " + message)
-    send_data(addr, message)
-
-
-def add_client_address(addr):
-    if not addr in clients_addr:
-        clients_addr.append(addr)
-        print("Accepted client", addr)
-
-
-def get_data_from_client():
-    print('Waiting for command...')
-    data, address, a = udp_recv(UDP_BUFFER_SIZE, None, 1, True)
-    # print(data)
-    # print(address)
-    data = data.decode('utf-8')
-    return [data, address]
-
-
-def udp_send(data, addr, bytes_amount, datagrams_amount):
-    global datagram_count_out
-    fl = False
-    datagram_count_out_begin = int(datagram_count_out)
-    data_temp = bytes(data)
-    i_temp = 0
-    seq_num = (-1, '127.0.0.1')
-    while True:
-        # print('A2A2', datagram_count_out)
-        for i in range(i_temp, datagrams_amount):
-            temp = format(datagram_count_out, '05d').encode('utf-8')
-            # print('===iteration ', i)
-            # print('datagram_count_out', datagram_count_out)
-            data_part = data[:bytes_amount]
-            data_part = temp + data_part
-            # if not data_part:
-            #     print('Bla')
-
-            server.sendto(data_part, addr)
-            # print(datagram_count_out)
-            data = data[bytes_amount:]
-            # datagram_count_out += 1
-            if datagram_count_out == 99999:
-                datagram_count_out = 0
-            else:
-                datagram_count_out += 1
-            # if i < datagrams_amount - 1:
-            try:
-                fl = False
-                server.settimeout(0)
-                seq_num = server.recvfrom(5)
-                server.settimeout(None)
-                fl = True
-                break
-
-            except Exception:
-                server.settimeout(15)
-                pass
-
-        if not fl:
-            # print('A0A0', datagram_count_out)
-            server.settimeout(8)
-            seq_num = server.recvfrom(UDP_BUFFER_SIZE + 5)
-            if len(seq_num) > 5:
-                raise Exception
-
-            # print('A1A1', seq_num)
-        fl = False
-        server.settimeout(None)
-
-        if datagram_count_out_begin + datagrams_amount > 99999:
-            dd = datagram_count_out_begin + datagrams_amount - 100000
-        else:
-            dd = datagram_count_out_begin + datagrams_amount
-
-        if datagram_count_out == int(seq_num[0]) and datagram_count_out == dd:
-            # print('BBBB')
-            # datagram_count_out = int(seq_num[0])
-            # print('finish ', datagram_count_out)
-            return True
-        else:
-            datagram_count_out = int(seq_num[0])
-            # datagrams_amount = datagram_count_out - datagram_count_out_old
-            if int(seq_num[0]) - datagram_count_out_begin < 0:
-                i_temp = 100000 + int(seq_num[0]) - datagram_count_out_begin
-            else:
-                i_temp = int(seq_num[0]) - datagram_count_out_begin
-            datagram_count_out_old = int(seq_num[0])
-            data = bytes(data_temp[(datagram_count_out - datagram_count_out_begin) * bytes_amount:])
-
-            # print('finish ', datagram_count_out)
-            # return False, sent_amount
-            continue
-
-
-def udp_recv(bytes_amount, timeout, datagrams_amount, wait_flag = False):
+def udp_recv_1(sock, bytes_amount, timeout, datagrams_amount, wait_flag = False):
     # print('a')
     global clients_addr
     global datagram_count_in
@@ -319,24 +40,20 @@ def udp_recv(bytes_amount, timeout, datagrams_amount, wait_flag = False):
     req = 0
 
     i_temp = 0
-    addr = ('127.0.0.1', SOCKET_PORT - 1)
+    addr = ('127.0.0.1', 0)
 
     while 1:
         i = i_temp
         while i < datagrams_amount:
             try:
                 if aaa:
-                    server.settimeout(timeout)
+                    sock.settimeout(timeout)
                 else:
-                    server.settimeout(0.2)
+                    sock.settimeout(0.2)
                 # print(i)
-                data_temp, addr = server.recvfrom(bytes_amount)
-                # if len(data_temp) < bytes_amount:
-                #     print(len(data_temp))
-                #     input('a')
-                #     raise Exception
-                # print(data_temp)
-                server.settimeout(None)
+                data_temp, addr = sock.recvfrom(bytes_amount)
+
+                sock.settimeout(None)
 
                 # print('===iteration ', i)
 
@@ -385,8 +102,8 @@ def udp_recv(bytes_amount, timeout, datagrams_amount, wait_flag = False):
         if counter == datagrams_amount:
             # print('aaaaa1')
             temp = format(datagram_count_in, '05d')
-            server.settimeout(None)
-            server.sendto(str.encode(temp), addr)
+            sock.settimeout(None)
+            sock.sendto(str.encode(temp), addr)
             break
         else:
             # print('aaaaa3', datagram_count_in)
@@ -401,47 +118,201 @@ def udp_recv(bytes_amount, timeout, datagrams_amount, wait_flag = False):
 
             req = datagram_count_in
             temp = format(datagram_count_in, '05d')
-            server.settimeout(None)
-            server.sendto(str.encode(temp), addr)
+            sock.settimeout(None)
+            sock.sendto(str.encode(temp), addr)
             continue
 
     return data, addr, exc_flag
 
 
-# ============================= UDP END =====================================
+def echo(addr, body):
+    udp_send(body.encode('utf-8'), addr=addr, bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
 
-print("1 - UDP Server\n2 - TCP Server")
-num = 0
-while (1):
-    num = input('Введите число: ')
-    try:
-        num = int(num)
-        if num == 1 or num == 2:
-            break
-    except ValueError:
-        pass
-    print('Check your input!')
-if num == 2:
-    print("TCP server")
-    server = TCPServer()
-    server.run()
-elif num == 1:
-    server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(('', SOCKET_PORT))
-    print("UDP server : %s:%d(UDP)" % (SOCKET_HOST, SOCKET_PORT))
 
-    # UDP_SERVER =
-    os.chdir('storage')  # изменяем текущий рабочий каталог
-    cur_dir = os.path.abspath(os.path.curdir)  # Получить абсолютный путь файла или каталога
-    storage_path = os.path.join(cur_dir,
-                                'storage')  # правильно соединяет переданный путь cur_dir к одному или более компонентов пути *STORAGE_DIR
-    if not os.path.exists(storage_path):
-        os.mkdir(storage_path)  # создает каталог с именем storage_path
-    time.sleep(1)
+def echo_thread(user):
+    ip_addr = user['address']
+    print(f'[D][{datetime.datetime.now()}] Echo thread for user [{ip_addr}] was started!')
+    echo(user['address'], user['params'])
+    # download()
+
+
+def download_thread(user):
+    print(f'[D][{datetime.datetime.now()}] Download thread started!')
+    # download()
+
+
+def udp_send(sock, data, addr, bytes_amount, datagrams_amount):
+    global datagram_count_out
+    fl = False
+    datagram_count_out_begin = int(datagram_count_out)
+    data_temp = bytes(data)
+    i_temp = 0
+    seq_num = (-1, '127.0.0.1')
     while True:
-        request, addr = get_data_from_client()
+        for i in range(i_temp, datagrams_amount):
+            temp = format(datagram_count_out, '05d').encode('utf-8')
+            data_part = data[:bytes_amount]
+            data_part = temp + data_part
+            # if not data_part:
+            #     print('Bla')
 
-        # add_client_address(addr)
-        print("get a command: ", request)
-        handle_client_request(addr, request)
+            sock.sendto(data_part, addr)
+            # print(datagram_count_out)
+            data = data[bytes_amount:]
+
+            if datagram_count_out == 99999:
+                datagram_count_out = 0
+            else:
+                datagram_count_out += 1
+            try:
+                fl = False
+                sock.settimeout(0)
+                seq_num = sock.recvfrom(5)
+                sock.settimeout(None)
+                fl = True
+                break
+
+            except Exception:
+                sock.settimeout(15)
+                pass
+
+        if not fl:
+            # print('A0A0', datagram_count_out)
+            sock.settimeout(8)
+            seq_num = sock.recvfrom(UDP_BUFFER_SIZE + 5)
+            if len(seq_num) > 5:
+                raise Exception
+
+            # print('A1A1', seq_num)
+        fl = False
+        sock.settimeout(None)
+
+        if datagram_count_out_begin + datagrams_amount > 99999:
+            dd = datagram_count_out_begin + datagrams_amount - 100000
+        else:
+            dd = datagram_count_out_begin + datagrams_amount
+
+        if datagram_count_out == int(seq_num[0]) and datagram_count_out == dd:
+            return True
+        else:
+            datagram_count_out = int(seq_num[0])
+
+            if int(seq_num[0]) - datagram_count_out_begin < 0:
+                i_temp = 100000 + int(seq_num[0]) - datagram_count_out_begin
+            else:
+                i_temp = int(seq_num[0]) - datagram_count_out_begin
+
+            data = bytes(data_temp[(datagram_count_out - datagram_count_out_begin) * bytes_amount:])
+
+            continue
+
+
+def download_service_thread(name):
+    users_download_info = []
+    print('Download service thread started!')
+
+    server_download_sock = create_sock(DOWNLOAD_SERVICE_PORT)
+
+    while 1:
+        print(f'[DS][{datetime.datetime.now()}] Waiting for command')
+        request, address, a = udp_recv_1(server_download_sock, UDP_BUFFER_SIZE, None, 1, True)
+
+        new_user = {
+            'address' : address,
+            'datagram_count_in' : 0,
+            'datagram_count_out' : 0
+        }
+
+        users_download_info.append(new_user)
+
+        thread = threading.Thread(target=download_thread, args=new_user)
+        thread.start()
+    
+        request = request.decode('utf-8')
+        print(f'[DS][{datetime.datetime.now()}] get a command: {request}')
+
+    # time.sleep(5)
+
+    print('End of download service thread!')
+
+
+def upload_service_thread(name):
+    users_upload_info = []
+
+    print('Upload service thread started!!')
+
+    server_upload_sock = create_sock(UPLOAD_SERVICE_PORT)
+
+    time.sleep(5)
+
+    print('End of upload!')
+
+
+def echo_service_thread(name):
+    users_echo_info = []
+
+    print('Echo service thread started!!')
+
+    server_echo_sock = create_sock(ECHO_SERVICE_PORT)
+
+    while 1:
+        print(f'[DS][{datetime.datetime.now()}] Waiting for command')
+        request, address, a = udp_recv_1(server_echo_sock, UDP_BUFFER_SIZE, None, 1, True)
+
+        request = request.decode('utf-8')
+        command, params = request.split(' ')
+
+        new_user = {
+            'address' : address,
+            'datagram_count_in' : 0,
+            'datagram_count_out' : 0,
+            'params' : params
+        }
+
+        users_echo_info.append(new_user)
+
+        thread = threading.Thread(target=echo_thread, args=new_user)
+        thread.start()
+          
+        print(f'[DS][{datetime.datetime.now()}] get a command: {request}')
+
+    # time.sleep(5)
+
+    print('End of echo service thread!')
+
+
+def time_service_thread(name):
+    users_time_info = []
+    
+    print('Time service thread started!!')
+
+    server_time_sock = create_sock(TIME_SERVICE_PORT)
+
+    time.sleep(5)
+
+    print('End of time thread!')
+
+
+
+########################################### MAIN ###########################################
+print('UDP Server!')
+print('Services: \n1. Download File (PORT 50001)\
+                \n2. Upload File (PORT 50002)\
+                \n3. Echo (PORT 50003)\
+                \n4. Get Time (PORT 50004)')
+thread1 = threading.Thread(target=download_service_thread, args='1')
+thread1.start()
+thread2 = threading.Thread(target=upload_service_thread, args='2')
+thread2.start()
+thread3 = threading.Thread(target=echo_service_thread, args='3')
+thread3.start()
+thread4 = threading.Thread(target=time_service_thread, args='4')
+thread4.start()
+
+print('[MAIN Thread] Service threads were started! Print [exit] to exit')
+
+# while(1):
+#     exit_input = input()
+#     if exit_input == 'exit':
+#         break
+#     print('[MAIN Thread] Check your input!')
