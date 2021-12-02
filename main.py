@@ -3,11 +3,14 @@ import time
 import socket
 import datetime
 import random
+# import numpy as np
 
 DOWNLOAD_SERVICE_PORT = 50001
 UPLOAD_SERVICE_PORT = 50002
 ECHO_SERVICE_PORT = 50003
 TIME_SERVICE_PORT = 50004
+
+available_sockets_num = []
 
 # server_download_sock = None
 # server_upload_sock = None
@@ -15,8 +18,14 @@ TIME_SERVICE_PORT = 50004
 # server_time_sock = None
 
 LOCK_ECHO = threading.Lock()
+LOCK_TIME = threading.Lock()
+LOCK_DOWNLOAD = threading.Lock()
+LOCK_UPLOAD = threading.Lock()
 
 users_echo_info = []
+users_time_info = []
+users_download_info = []
+users_upload_info = []
 
 UDP_BUFFER_SIZE = 32768
 UDP_DATAGRAMS_AMOUNT = 15
@@ -27,6 +36,26 @@ def create_sock(port_num):
     new_socket.bind(('', port_num))
 
     return new_socket
+
+
+
+
+
+
+
+def get_socket_num():
+    global available_sockets_num
+
+    index = random.randint(0, len(available_sockets_num) - 1)
+
+    sock_num = available_sockets_num[index]
+    available_sockets_num.remove(sock_num)
+
+    return sock_num
+
+
+def return_released_socket_num(sock_num):
+    available_sockets_num.append(sock_num)
 
 
 def udp_recv_1(sock, user, bytes_amount, timeout, datagrams_amount, wait_flag = False):
@@ -161,35 +190,30 @@ def udp_recv_from_new_user(sock, bytes_amount):
     return new_user
 
 
-
-
-# def echo(addr, body):
-    
-
-
 def echo_thread(user):
     global users_echo_info
+    print(f'[E][{datetime.datetime.now()}] Echo thread started, amount of users remaining: {len(users_echo_info)}')
     
-    dunamic_sock_num = random.randint(50050, 50100)
+    dunamic_sock_num = get_socket_num()
+    print(f'[E][{datetime.datetime.now()}] dunamic_sock_num retrieved: {dunamic_sock_num}')
     echo_sock = create_sock(dunamic_sock_num)
     ip_addr = user['address']
-    print(f'[D][{datetime.datetime.now()}] Echo thread for user [{ip_addr}] was started!')
+    print(f'[E][{datetime.datetime.now()}] Echo thread for user [{ip_addr}] was started!')
     # echo(user['address'], user['params'])
     request = user['request'].decode('utf-8')
     command, params = request.split(' ')
-    print('For', str(format(dunamic_sock_num, '05d') + params).encode('utf-8'))
+    # print('For', str(format(dunamic_sock_num, '05d') + params).encode('utf-8'))
     user['request'] = str(format(dunamic_sock_num, '05d') + params).encode('utf-8')
     user = udp_send(echo_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
     echo_sock.close()
+    return_released_socket_num(dunamic_sock_num)
+    print(f'[E][{datetime.datetime.now()}] dunamic_sock_num returned: {dunamic_sock_num}')
 
     LOCK_ECHO.acquire(True)
-    # users_echo_info.remove()
+    users_echo_info.remove(next(item for item in users_echo_info if item["address"] == user['address']))  
+    print(f'[E][{datetime.datetime.now()}] Echo thread finished, amount of users remaining: {len(users_echo_info)}')
     LOCK_ECHO.release()
 
-
-def download_thread(user):
-    print(f'[D][{datetime.datetime.now()}] Download thread started!')
-    # download()
 
 
 def udp_send(sock, user, data, bytes_amount, datagrams_amount):
@@ -263,8 +287,33 @@ def udp_send(sock, user, data, bytes_amount, datagrams_amount):
             continue
 
 
+def download_thread(user):
+    global users_download_info
+    print(f'[D][{datetime.datetime.now()}] Download thread started, amount of users remaining: {len(users_download_info)}')
+
+    dunamic_sock_num = get_socket_num()
+    print(f'[D][{datetime.datetime.now()}] dunamic_sock_num retrieved: {dunamic_sock_num}')
+    download_sock = create_sock(dunamic_sock_num)
+    ip_addr = user['address']
+    print(f'[D][{datetime.datetime.now()}] Download thread for user [{ip_addr}] was started!')
+
+    request = user['request'].decode('utf-8')
+    command, params = request.split(' ')
+
+    # user['request'] = str(format(dunamic_sock_num, '05d') + params).encode('utf-8')
+    # user = udp_send(download_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+    # download_sock.close()
+    # return_released_socket_num(dunamic_sock_num)
+    # print(f'[D][{datetime.datetime.now()}] dunamic_sock_num returned: {dunamic_sock_num}')
+
+    LOCK_DOWNLOAD.acquire(True)
+    users_download_info.remove(next(item for item in users_download_info if item["address"] == user['address']))  
+    print(f'[D][{datetime.datetime.now()}] Download thread finished, amount of users remaining: {len(users_download_info)}')
+    LOCK_DOWNLOAD.release()
+
 def download_service_thread(name):
-    users_download_info = []
+    global users_download_info
+    # users_download_info = []
     print('[DS] Download service thread started!')
 
     server_download_sock = create_sock(DOWNLOAD_SERVICE_PORT)
@@ -273,7 +322,9 @@ def download_service_thread(name):
         print(f'[DS][{datetime.datetime.now()}] Waiting for command')
         new_user = udp_recv_from_new_user(server_download_sock, UDP_BUFFER_SIZE)
 
+        LOCK_DOWNLOAD.acquire(True)
         users_download_info.append(new_user)
+        LOCK_DOWNLOAD.release()
 
         thread = threading.Thread(target=download_thread, args=(new_user,))
         thread.start()
@@ -320,15 +371,51 @@ def echo_service_thread(name):
 
     print('[ES] End of echo service thread!')
 
+def time_thread(user):
+    global users_time_info
+    print(f'[T][{datetime.datetime.now()}] Time thread started, amount of users remaining: {len(users_time_info)}')
+    
+    dunamic_sock_num = get_socket_num()
+    print(f'[T][{datetime.datetime.now()}] dunamic_sock_num retrieved: {dunamic_sock_num}')
+    time_sock = create_sock(dunamic_sock_num)
+    ip_addr = user['address']
+    print(f'[T][{datetime.datetime.now()}] Time thread for user [{ip_addr}] was started!')
+
+    params = str(datetime.datetime.now().time())[:19]
+
+    print('For', str(format(dunamic_sock_num, '05d') + params).encode('utf-8'))
+    user['request'] = str(format(dunamic_sock_num, '05d') + params).encode('utf-8')
+    user = udp_send(time_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+    time_sock.close()
+    return_released_socket_num(dunamic_sock_num)
+    print(f'[T][{datetime.datetime.now()}] dunamic_sock_num returned: {dunamic_sock_num}')
+
+    LOCK_TIME.acquire(True)
+    users_time_info.remove(next(item for item in users_time_info if item["address"] == user['address']))  
+    print(f'[T][{datetime.datetime.now()}] Time thread finished, amount of users remaining: {len(users_time_info)}')
+    LOCK_TIME.release()
 
 def time_service_thread(name):
-    users_time_info = []
+    global users_time_info
     
     print('[TS] Time service thread started!')
 
     server_time_sock = create_sock(TIME_SERVICE_PORT)
 
-    time.sleep(5)
+    while 1:
+        print(f'[TS][{datetime.datetime.now()}] Waiting for command')
+        new_user = udp_recv_from_new_user(server_time_sock, UDP_BUFFER_SIZE)
+
+        request = new_user['request'].decode('utf-8')
+
+        LOCK_TIME.acquire(True)
+        users_time_info.append(new_user)
+        LOCK_TIME.release()
+
+        thread = threading.Thread(target=time_thread, args=(new_user,))
+        thread.start()
+          
+        print(f'[TS][{datetime.datetime.now()}] get a command: {request}')
 
     print('[TS] End of time service thread!')
 
@@ -341,6 +428,9 @@ print('Services: \n1. Download File (PORT 50001)\
                 \n2. Upload File (PORT 50002)\
                 \n3. Echo (PORT 50003)\
                 \n4. Get Time (PORT 50004)')
+
+for i in range(100):
+    available_sockets_num.append(50050 + i)
                 
 thread1 = threading.Thread(target=download_service_thread, args='1')
 thread1.start()
