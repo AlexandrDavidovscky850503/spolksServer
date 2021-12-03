@@ -4,8 +4,6 @@ import socket
 import datetime
 import random
 import os
-import tqdm
-# import numpy as np
 
 STATUS_OK = 'OK'
 STATUS_NO_FILE = 'NO FILE'
@@ -32,7 +30,7 @@ users_time_info = []
 users_download_info = []
 users_upload_info = []
 
-UDP_BUFFER_SIZE = 32768
+UDP_BUFFER_SIZE = 1024
 UDP_DATAGRAMS_AMOUNT = 5
 
 def create_sock(port_num):
@@ -53,7 +51,7 @@ def send_data(addr, data):
 
 def download(sock, user, dynamic_port_num, file_name):
     print(f'[D][{datetime.datetime.now()}] Download function started!')
-    addr = user['address']
+    # addr = user['address']
     if os.path.isfile("storage/" + file_name):
         user = udp_send(sock, user, str(STATUS_OK).encode('utf-8'), bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
     else:
@@ -71,43 +69,29 @@ def download(sock, user, dynamic_port_num, file_name):
 
     data_size_recv, user = udp_recv_1(sock, user, UDP_BUFFER_SIZE, None, 1)
 
-    # data_size_recv, address, a = udp_recv_1(UDP_BUFFER_SIZE, None, 1)
     data_size_recv = int(data_size_recv.decode('utf-8'))
 
     f.seek(data_size_recv, 0)
     current_pos = data_size_recv
 
-    # progress = tqdm.tqdm(range(int(size)), f"Progress of {file_name}:", unit="B", unit_scale=True,
-    #                      unit_divisor=1024)
-
-    # progress.update(total_size)
     while 1:
         try:
             if 1:
                 data_file = f.read(UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT)
-                # print('nnnn')
-                # server.sendto(data_file, addr)
-                # udp_send(data_file, addr, UDP_BUFFER_SIZE, UDP_DATAGRAMS_AMOUNT)
-                # user = udp_send(sock, user, data_file, bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
                 user = udp_send(sock, user, data_file, bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=UDP_DATAGRAMS_AMOUNT)
-                # print('aaaa')
 
                 current_pos = current_pos + UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT
                 f.seek(current_pos)
                 total_size += len(data_file)
-                # print(total_size)
-                # print('upd')
-                # progress.update(len(data_file))
-                # print(total_size)
                 if total_size == size:
                     break
         except Exception as e:
             current_pos = current_pos + UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT
             total_size += len(data_file)
             if total_size == size:
-                print('Ack for last portion was not received. Probably the client was disconnected')
+                print(f'[D][{datetime.datetime.now()}] Ack for last portion was not received. Probably the client was disconnected')
             else:
-                print('Client disconnected')
+                print(f'[D][{datetime.datetime.now()}] Client disconnected')
                 print(e)
             break
             # f.close()
@@ -115,12 +99,62 @@ def download(sock, user, dynamic_port_num, file_name):
             # progress.close()
             # os._exit(1)
 
-    # progress.close()
-    print("END")
     if total_size == size:
-        print("All")
+        print(f'[D][{datetime.datetime.now()}] File was sent completely')
     f.close()
 
+
+def upload(sock, user, dynamic_port_num, file_name):
+    print(f'[U][{datetime.datetime.now()}] Upload function started!')
+
+    user = udp_send(sock, user, str(0).encode('utf-8'), bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+
+    size, user = udp_recv_1(sock, user, UDP_BUFFER_SIZE, None, 1)
+    size = int(size.decode('utf-8'))
+    print(f'[U][{datetime.datetime.now()}] File size: {size}')
+
+    total_size = 0
+
+    # send_data(addr, 0)
+    user = udp_send(sock, user, str(0).encode('utf-8'), bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+    file_name = os.path.basename(file_name)
+
+    f = open(file_name, "wb")
+
+    current_pos = 0
+    # print("=====================")
+    i = 0
+
+    while (1):
+        try:
+            data, user = udp_recv_1(sock, user, UDP_BUFFER_SIZE + 10, 10.0, UDP_DATAGRAMS_AMOUNT)
+            # data, address, a = udp_recv_1(UDP_BUFFER_SIZE + 5, 10.0, UDP_DATAGRAMS_AMOUNT)
+            if data:
+                if 1:
+                    i += 1
+                    f.seek(current_pos, 0)
+                    f.write(data)
+                    current_pos += len(data)
+                total_size += len(data)
+                # print(total_size)
+                if total_size == size:
+                    break
+
+            else:
+                print("Client disconnected")
+                return
+
+        except Exception:
+            print("Client disconnected")
+            break
+            # send_data(addr, "ERROR")
+            # f.close()
+            # server.close()
+            # os._exit(1)
+    print("END")
+    if size == total_size:
+        print("\n" + file_name + " was uploaded")
+    f.close()
 
 
 def get_socket_num():
@@ -240,7 +274,6 @@ def udp_recv_1(sock, user, bytes_amount, timeout, datagrams_amount, wait_flag = 
     return data, user
 
 
-
 def udp_recv_from_new_user(sock, bytes_amount):
     data = bytes()     
     sock.settimeout(None)
@@ -281,7 +314,7 @@ def echo_thread(user):
     echo_sock = create_sock(dynamic_sock_num)
     ip_addr = user['address']
     print(f'[E][{datetime.datetime.now()}] Echo thread for user [{ip_addr}] was started!')
-    # echo(user['address'], user['params'])
+
     request = user['request'].decode('utf-8')
     command, params = request.split(' ')
     # print('For', str(format(dynamic_sock_num, '05d') + params).encode('utf-8'))
@@ -297,9 +330,7 @@ def echo_thread(user):
     LOCK_ECHO.release()
 
 
-
 def udp_send(sock, user, data, bytes_amount, datagrams_amount):
-    # global datagram_count_out
     addr = user['address']
     datagram_count_in = user['datagram_count_in']
     datagram_count_out = user['datagram_count_out']
@@ -369,7 +400,6 @@ def udp_send(sock, user, data, bytes_amount, datagrams_amount):
                 i_temp = int(seq_num[0]) - datagram_count_out_begin
 
             data = bytes(data_temp[(datagram_count_out - datagram_count_out_begin) * bytes_amount:])
-
             continue
 
 
@@ -389,11 +419,9 @@ def download_thread(user):
 
     download(download_sock, user, dynamic_sock_num, file_name=params)
 
-    # user['request'] = str(format(dynamic_sock_num, '05d') + params).encode('utf-8')
-    # user = udp_send(download_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
-    # download_sock.close()
-    # return_released_socket_num(dynamic_sock_num)
-    # print(f'[D][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
+    download_sock.close()
+    return_released_socket_num(dynamic_sock_num)
+    print(f'[D][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
 
     LOCK_DOWNLOAD.acquire(True)
     users_download_info.remove(next(item for item in users_download_info if item["address"] == user['address']))  
@@ -424,14 +452,52 @@ def download_service_thread(name):
     print('[DS] End of download service thread!')
 
 
-def upload_service_thread(name):
-    users_upload_info = []
+def upload_thread(user):
+    global users_upload_info
+    print(f'[U][{datetime.datetime.now()}] Upload thread started, amount of users remaining: {len(users_upload_info)}')
 
-    print('[US] Upload service thread started!!')
+    dynamic_sock_num = get_socket_num()
+    user['dynamic_port'] = dynamic_sock_num
+    print(f'[U][{datetime.datetime.now()}] dynamic_sock_num retrieved: {dynamic_sock_num}')
+    upload_sock = create_sock(dynamic_sock_num)
+    ip_addr = user['address']
+    print(f'[U][{datetime.datetime.now()}] Upload thread for user [{ip_addr}] was started!')
+
+    request = user['request'].decode('utf-8')
+    command, params = request.split(' ')
+
+    upload(upload_sock, user, dynamic_sock_num, file_name=params)
+
+    upload_sock.close()
+    return_released_socket_num(dynamic_sock_num)
+    print(f'[U][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
+
+    LOCK_UPLOAD.acquire(True)
+    users_upload_info.remove(next(item for item in users_upload_info if item["address"] == user['address']))  
+    print(f'[U][{datetime.datetime.now()}] Upload thread finished, amount of users remaining: {len(users_upload_info)}')
+    LOCK_UPLOAD.release()
+
+
+def upload_service_thread(name):
+    global users_upload_info
+    # users_upload_info = []
+    print('[US] Upload service thread started!')
 
     server_upload_sock = create_sock(UPLOAD_SERVICE_PORT)
 
-    time.sleep(5)
+    while 1:
+        print(f'[US][{datetime.datetime.now()}] Waiting for command')
+        new_user = udp_recv_from_new_user(server_upload_sock, UDP_BUFFER_SIZE)
+
+        LOCK_UPLOAD.acquire(True)
+        users_upload_info.append(new_user)
+        LOCK_UPLOAD.release()
+
+        thread = threading.Thread(target=upload_thread, args=(new_user,))
+        thread.start()
+    
+        request = new_user['request'].decode('utf-8')
+        print(f'[US][{datetime.datetime.now()}] get a command: {request}')
 
     print('[US] End of upload service thread!')
 
