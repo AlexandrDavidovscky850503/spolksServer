@@ -3,7 +3,12 @@ import time
 import socket
 import datetime
 import random
+import os
+import tqdm
 # import numpy as np
+
+STATUS_OK = 'OK'
+STATUS_NO_FILE = 'NO FILE'
 
 DOWNLOAD_SERVICE_PORT = 50001
 UPLOAD_SERVICE_PORT = 50002
@@ -28,7 +33,7 @@ users_download_info = []
 users_upload_info = []
 
 UDP_BUFFER_SIZE = 32768
-UDP_DATAGRAMS_AMOUNT = 15
+UDP_DATAGRAMS_AMOUNT = 5
 
 def create_sock(port_num):
     new_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -37,9 +42,84 @@ def create_sock(port_num):
 
     return new_socket
 
+def get_data():
+    data, address, a = udp_recv_1(UDP_BUFFER_SIZE, None, 1)
+    data = data.decode('utf-8')
+    return [data, address]
 
+def send_data(addr, data):
+    print('send data', len(str(data).encode('utf-8')))
+    udp_send(str(data).encode('utf-8'), addr, UDP_BUFFER_SIZE, 1)
 
+def download(sock, user, dynamic_port_num, file_name):
+    print(f'[D][{datetime.datetime.now()}] Download function started!')
+    addr = user['address']
+    if os.path.isfile("storage/" + file_name):
+        user = udp_send(sock, user, str(STATUS_OK).encode('utf-8'), bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+    else:
+        user = udp_send(sock, user, str(STATUS_NO_FILE).encode('utf-8'), bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+        return
 
+    f = open("storage/" + file_name, "rb+")
+
+    size = int(os.path.getsize("storage/" + file_name))
+    total_size = 0
+
+    print(f'[D][{datetime.datetime.now()}] File size: {size}')
+
+    user = udp_send(sock, user, str(size).encode('utf-8'), bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+
+    data_size_recv, user = udp_recv_1(sock, user, UDP_BUFFER_SIZE, None, 1)
+
+    # data_size_recv, address, a = udp_recv_1(UDP_BUFFER_SIZE, None, 1)
+    data_size_recv = int(data_size_recv.decode('utf-8'))
+
+    f.seek(data_size_recv, 0)
+    current_pos = data_size_recv
+
+    # progress = tqdm.tqdm(range(int(size)), f"Progress of {file_name}:", unit="B", unit_scale=True,
+    #                      unit_divisor=1024)
+
+    # progress.update(total_size)
+    while 1:
+        try:
+            if 1:
+                data_file = f.read(UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT)
+                # print('nnnn')
+                # server.sendto(data_file, addr)
+                # udp_send(data_file, addr, UDP_BUFFER_SIZE, UDP_DATAGRAMS_AMOUNT)
+                # user = udp_send(sock, user, data_file, bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+                user = udp_send(sock, user, data_file, bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=UDP_DATAGRAMS_AMOUNT)
+                # print('aaaa')
+
+                current_pos = current_pos + UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT
+                f.seek(current_pos)
+                total_size += len(data_file)
+                # print(total_size)
+                # print('upd')
+                # progress.update(len(data_file))
+                # print(total_size)
+                if total_size == size:
+                    break
+        except Exception as e:
+            current_pos = current_pos + UDP_BUFFER_SIZE * UDP_DATAGRAMS_AMOUNT
+            total_size += len(data_file)
+            if total_size == size:
+                print('Ack for last portion was not received. Probably the client was disconnected')
+            else:
+                print('Client disconnected')
+                print(e)
+            break
+            # f.close()
+            # server.close()
+            # progress.close()
+            # os._exit(1)
+
+    # progress.close()
+    print("END")
+    if total_size == size:
+        print("All")
+    f.close()
 
 
 
@@ -184,7 +264,8 @@ def udp_recv_from_new_user(sock, bytes_amount):
             'address' : addr,
             'datagram_count_in' : datagram_count_in,
             'datagram_count_out' : 0,
-            'request' : data
+            'request' : data,
+            'dynamic_port' : 0
         }
 
     return new_user
@@ -194,20 +275,21 @@ def echo_thread(user):
     global users_echo_info
     print(f'[E][{datetime.datetime.now()}] Echo thread started, amount of users remaining: {len(users_echo_info)}')
     
-    dunamic_sock_num = get_socket_num()
-    print(f'[E][{datetime.datetime.now()}] dunamic_sock_num retrieved: {dunamic_sock_num}')
-    echo_sock = create_sock(dunamic_sock_num)
+    dynamic_sock_num = get_socket_num()
+    user['dynamic_port'] = dynamic_sock_num
+    print(f'[E][{datetime.datetime.now()}] dynamic_sock_num retrieved: {dynamic_sock_num}')
+    echo_sock = create_sock(dynamic_sock_num)
     ip_addr = user['address']
     print(f'[E][{datetime.datetime.now()}] Echo thread for user [{ip_addr}] was started!')
     # echo(user['address'], user['params'])
     request = user['request'].decode('utf-8')
     command, params = request.split(' ')
-    # print('For', str(format(dunamic_sock_num, '05d') + params).encode('utf-8'))
-    user['request'] = str(format(dunamic_sock_num, '05d') + params).encode('utf-8')
+    # print('For', str(format(dynamic_sock_num, '05d') + params).encode('utf-8'))
+    user['request'] = str(params).encode('utf-8')
     user = udp_send(echo_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
     echo_sock.close()
-    return_released_socket_num(dunamic_sock_num)
-    print(f'[E][{datetime.datetime.now()}] dunamic_sock_num returned: {dunamic_sock_num}')
+    return_released_socket_num(dynamic_sock_num)
+    print(f'[E][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
 
     LOCK_ECHO.acquire(True)
     users_echo_info.remove(next(item for item in users_echo_info if item["address"] == user['address']))  
@@ -222,6 +304,8 @@ def udp_send(sock, user, data, bytes_amount, datagrams_amount):
     datagram_count_in = user['datagram_count_in']
     datagram_count_out = user['datagram_count_out']
 
+    temp2 = format(user['dynamic_port'], '05d').encode('utf-8')
+
     fl = False
     datagram_count_out_begin = int(datagram_count_out)
     data_temp = bytes(data)
@@ -229,10 +313,10 @@ def udp_send(sock, user, data, bytes_amount, datagrams_amount):
     seq_num = (-1, '127.0.0.1')
     while True:
         for i in range(i_temp, datagrams_amount):
-            print('datagram_count_out', datagram_count_out)
+            # print('datagram_count_out', datagram_count_out)
             temp = format(datagram_count_out, '05d').encode('utf-8')
             data_part = data[:bytes_amount]
-            data_part = temp + data_part
+            data_part = temp + temp2 + data_part
             # if not data_part:
             #     print('Bla')
 
@@ -260,6 +344,8 @@ def udp_send(sock, user, data, bytes_amount, datagrams_amount):
             sock.settimeout(8)
             seq_num = sock.recvfrom(UDP_BUFFER_SIZE + 5)
             if len(seq_num) > 5:
+                user['datagram_count_in'] = datagram_count_in
+                user['datagram_count_out'] = datagram_count_out
                 raise Exception
 
         fl = False
@@ -272,7 +358,7 @@ def udp_send(sock, user, data, bytes_amount, datagrams_amount):
 
         if datagram_count_out == int(seq_num[0]) and datagram_count_out == dd:
             user['datagram_count_in'] = datagram_count_in
-            user['datagram_count_in'] = datagram_count_out
+            user['datagram_count_out'] = datagram_count_out
             return user
         else:
             datagram_count_out = int(seq_num[0])
@@ -291,20 +377,23 @@ def download_thread(user):
     global users_download_info
     print(f'[D][{datetime.datetime.now()}] Download thread started, amount of users remaining: {len(users_download_info)}')
 
-    dunamic_sock_num = get_socket_num()
-    print(f'[D][{datetime.datetime.now()}] dunamic_sock_num retrieved: {dunamic_sock_num}')
-    download_sock = create_sock(dunamic_sock_num)
+    dynamic_sock_num = get_socket_num()
+    user['dynamic_port'] = dynamic_sock_num
+    print(f'[D][{datetime.datetime.now()}] dynamic_sock_num retrieved: {dynamic_sock_num}')
+    download_sock = create_sock(dynamic_sock_num)
     ip_addr = user['address']
     print(f'[D][{datetime.datetime.now()}] Download thread for user [{ip_addr}] was started!')
 
     request = user['request'].decode('utf-8')
     command, params = request.split(' ')
 
-    # user['request'] = str(format(dunamic_sock_num, '05d') + params).encode('utf-8')
+    download(download_sock, user, dynamic_sock_num, file_name=params)
+
+    # user['request'] = str(format(dynamic_sock_num, '05d') + params).encode('utf-8')
     # user = udp_send(download_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
     # download_sock.close()
-    # return_released_socket_num(dunamic_sock_num)
-    # print(f'[D][{datetime.datetime.now()}] dunamic_sock_num returned: {dunamic_sock_num}')
+    # return_released_socket_num(dynamic_sock_num)
+    # print(f'[D][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
 
     LOCK_DOWNLOAD.acquire(True)
     users_download_info.remove(next(item for item in users_download_info if item["address"] == user['address']))  
@@ -375,20 +464,21 @@ def time_thread(user):
     global users_time_info
     print(f'[T][{datetime.datetime.now()}] Time thread started, amount of users remaining: {len(users_time_info)}')
     
-    dunamic_sock_num = get_socket_num()
-    print(f'[T][{datetime.datetime.now()}] dunamic_sock_num retrieved: {dunamic_sock_num}')
-    time_sock = create_sock(dunamic_sock_num)
+    dynamic_sock_num = get_socket_num()
+    user['dynamic_port'] = dynamic_sock_num
+    print(f'[T][{datetime.datetime.now()}] dynamic_sock_num retrieved: {dynamic_sock_num}')
+    time_sock = create_sock(dynamic_sock_num)
     ip_addr = user['address']
     print(f'[T][{datetime.datetime.now()}] Time thread for user [{ip_addr}] was started!')
 
     params = str(datetime.datetime.now().time())[:19]
 
-    print('For', str(format(dunamic_sock_num, '05d') + params).encode('utf-8'))
-    user['request'] = str(format(dunamic_sock_num, '05d') + params).encode('utf-8')
+    # print('For', str(format(dynamic_sock_num, '05d') + params).encode('utf-8'))
+    user['request'] = str(params).encode('utf-8')
     user = udp_send(time_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
     time_sock.close()
-    return_released_socket_num(dunamic_sock_num)
-    print(f'[T][{datetime.datetime.now()}] dunamic_sock_num returned: {dunamic_sock_num}')
+    return_released_socket_num(dynamic_sock_num)
+    print(f'[T][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
 
     LOCK_TIME.acquire(True)
     users_time_info.remove(next(item for item in users_time_info if item["address"] == user['address']))  
