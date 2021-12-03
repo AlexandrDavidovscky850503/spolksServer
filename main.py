@@ -94,13 +94,9 @@ def download(sock, user, dynamic_port_num, file_name):
                 print(f'[D][{datetime.datetime.now()}] Client disconnected')
                 print(e)
             break
-            # f.close()
-            # server.close()
-            # progress.close()
-            # os._exit(1)
 
     if total_size == size:
-        print(f'[D][{datetime.datetime.now()}] File was sent completely')
+        print(f'[D][{datetime.datetime.now()}] File [{file_name}] was sent completely')
     f.close()
 
 
@@ -115,45 +111,35 @@ def upload(sock, user, dynamic_port_num, file_name):
 
     total_size = 0
 
-    # send_data(addr, 0)
     user = udp_send(sock, user, str(0).encode('utf-8'), bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
     file_name = os.path.basename(file_name)
 
     f = open(file_name, "wb")
 
     current_pos = 0
-    # print("=====================")
-    i = 0
 
     while (1):
         try:
             data, user = udp_recv_1(sock, user, UDP_BUFFER_SIZE + 10, 10.0, UDP_DATAGRAMS_AMOUNT)
-            # data, address, a = udp_recv_1(UDP_BUFFER_SIZE + 5, 10.0, UDP_DATAGRAMS_AMOUNT)
-            if data:
-                if 1:
-                    i += 1
-                    f.seek(current_pos, 0)
-                    f.write(data)
-                    current_pos += len(data)
+            if data:               
+                f.seek(current_pos, 0)
+                f.write(data)
+                current_pos += len(data)
+
                 total_size += len(data)
-                # print(total_size)
                 if total_size == size:
                     break
 
             else:
-                print("Client disconnected")
+                print(f'[U][{datetime.datetime.now()}] Client disconnected')
                 return
 
         except Exception:
-            print("Client disconnected")
+            print(f'[U][{datetime.datetime.now()}] Client disconnected')
             break
-            # send_data(addr, "ERROR")
-            # f.close()
-            # server.close()
-            # os._exit(1)
-    print("END")
+
     if size == total_size:
-        print("\n" + file_name + " was uploaded")
+        print(f'[U][{datetime.datetime.now()}] File [{file_name}] was received completely')
     f.close()
 
 
@@ -261,8 +247,6 @@ def udp_recv_1(sock, user, bytes_amount, timeout, datagrams_amount, wait_flag = 
             else:
                 i_temp = datagram_count_in - datagram_count_in_begin
 
-            # datagram_count_in_old = datagram_count_in
-
             req = datagram_count_in
             temp = format(datagram_count_in, '05d')
             sock.settimeout(None)
@@ -279,7 +263,7 @@ def udp_recv_from_new_user(sock, bytes_amount):
     sock.settimeout(None)
     data_temp, addr = sock.recvfrom(bytes_amount)
 
-    print('data_temp', data_temp)
+    # print('data_temp', data_temp)
 
     # data_temp = data_temp.decode('utf-8')
 
@@ -315,11 +299,15 @@ def echo_thread(user):
     ip_addr = user['address']
     print(f'[E][{datetime.datetime.now()}] Echo thread for user [{ip_addr}] was started!')
 
-    request = user['request'].decode('utf-8')
-    command, params = request.split(' ')
-    # print('For', str(format(dynamic_sock_num, '05d') + params).encode('utf-8'))
-    user['request'] = str(params).encode('utf-8')
-    user = udp_send(echo_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+    try:
+        request = user['request'].decode('utf-8')
+        command, params = request.split(' ')
+        # print('For', str(format(dynamic_sock_num, '05d') + params).encode('utf-8'))
+        user['request'] = str(params).encode('utf-8')
+        user = udp_send(echo_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+    except Exception:
+        print(f'[E][{datetime.datetime.now()}] Unable to process the command!')
+
     echo_sock.close()
     return_released_socket_num(dynamic_sock_num)
     print(f'[E][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
@@ -417,7 +405,10 @@ def download_thread(user):
     request = user['request'].decode('utf-8')
     command, params = request.split(' ')
 
-    download(download_sock, user, dynamic_sock_num, file_name=params)
+    try:
+        download(download_sock, user, dynamic_sock_num, file_name=params)
+    except Exception:
+        print(f'[D][{datetime.datetime.now()}] Unable to process the command!')
 
     download_sock.close()
     return_released_socket_num(dynamic_sock_num)
@@ -431,7 +422,7 @@ def download_thread(user):
 def download_service_thread(name):
     global users_download_info
     # users_download_info = []
-    print('[DS] Download service thread started!')
+    print(f'[DS][{datetime.datetime.now()}] Download service thread started!')
 
     server_download_sock = create_sock(DOWNLOAD_SERVICE_PORT)
 
@@ -449,7 +440,7 @@ def download_service_thread(name):
         request = new_user['request'].decode('utf-8')
         print(f'[DS][{datetime.datetime.now()}] get a command: {request}')
 
-    print('[DS] End of download service thread!')
+    print(f'[DS][{datetime.datetime.now()}] End of download service thread!')
 
 
 def upload_thread(user):
@@ -466,7 +457,10 @@ def upload_thread(user):
     request = user['request'].decode('utf-8')
     command, params = request.split(' ')
 
-    upload(upload_sock, user, dynamic_sock_num, file_name=params)
+    try:
+        upload(upload_sock, user, dynamic_sock_num, file_name=params)
+    except Exception:
+        print(f'[U][{datetime.datetime.now()}] Unable to process the command!')
 
     upload_sock.close()
     return_released_socket_num(dynamic_sock_num)
@@ -481,7 +475,7 @@ def upload_thread(user):
 def upload_service_thread(name):
     global users_upload_info
     # users_upload_info = []
-    print('[US] Upload service thread started!')
+    print(f'[US][{datetime.datetime.now()}] Upload service thread started!')
 
     server_upload_sock = create_sock(UPLOAD_SERVICE_PORT)
 
@@ -499,13 +493,13 @@ def upload_service_thread(name):
         request = new_user['request'].decode('utf-8')
         print(f'[US][{datetime.datetime.now()}] get a command: {request}')
 
-    print('[US] End of upload service thread!')
+    print(f'[US][{datetime.datetime.now()}] End of upload service thread!')
 
 
 def echo_service_thread(name):
     global users_echo_info
 
-    print('[ES] Echo service thread started!')
+    print(f'[ES][{datetime.datetime.now()}] Echo service thread started!')
 
     server_echo_sock = create_sock(ECHO_SERVICE_PORT)
 
@@ -524,7 +518,7 @@ def echo_service_thread(name):
           
         print(f'[ES][{datetime.datetime.now()}] get a command: {request}')
 
-    print('[ES] End of echo service thread!')
+    print(f'[ES][{datetime.datetime.now()}] End of echo service thread!')
 
 def time_thread(user):
     global users_time_info
@@ -540,8 +534,12 @@ def time_thread(user):
     params = str(datetime.datetime.now().time())[:19]
 
     # print('For', str(format(dynamic_sock_num, '05d') + params).encode('utf-8'))
-    user['request'] = str(params).encode('utf-8')
-    user = udp_send(time_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+    try:
+        user['request'] = str(params).encode('utf-8')
+        user = udp_send(time_sock, user, user['request'], bytes_amount=UDP_BUFFER_SIZE, datagrams_amount=1)
+    except Exception:
+        print(f'[T][{datetime.datetime.now()}] Unable to process the command!')
+
     time_sock.close()
     return_released_socket_num(dynamic_sock_num)
     print(f'[T][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
@@ -554,7 +552,7 @@ def time_thread(user):
 def time_service_thread(name):
     global users_time_info
     
-    print('[TS] Time service thread started!')
+    print(f'[TS][{datetime.datetime.now()}] Time service thread started!')
 
     server_time_sock = create_sock(TIME_SERVICE_PORT)
 
@@ -573,8 +571,7 @@ def time_service_thread(name):
           
         print(f'[TS][{datetime.datetime.now()}] get a command: {request}')
 
-    print('[TS] End of time service thread!')
-
+    print(f'[TS][{datetime.datetime.now()}] End of time service thread!')
 
 
 ########################################### MAIN ###########################################
@@ -584,6 +581,7 @@ print('Services: \n1. Download File (PORT 50001)\
                 \n2. Upload File (PORT 50002)\
                 \n3. Echo (PORT 50003)\
                 \n4. Get Time (PORT 50004)')
+print('================================================================')
 
 for i in range(100):
     available_sockets_num.append(50050 + i)
@@ -597,12 +595,11 @@ thread3.start()
 thread4 = threading.Thread(target=time_service_thread, args='4')
 thread4.start()
 
-print('================================================================')
-print('[MAIN Thread] Service threads were started! Print [exit] to exit')
-print('================================================================')
+print(f'[MAIN Thread][{datetime.datetime.now()}] Service threads were started!')
+# print(f'[MAIN Thread][{datetime.datetime.now()}] Service threads were started! Print [exit] to exit')
 
 # while(1):
 #     exit_input = input()
 #     if exit_input == 'exit':
-#         break
+#         exit(0)
 #     print('[MAIN Thread] Check your input!')
