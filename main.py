@@ -24,6 +24,7 @@ LOCK_ECHO = threading.Lock()
 LOCK_TIME = threading.Lock()
 LOCK_DOWNLOAD = threading.Lock()
 LOCK_UPLOAD = threading.Lock()
+LOCK_PORTS_PULL = threading.Lock()
 
 users_echo_info = []
 users_time_info = []
@@ -145,6 +146,9 @@ def upload(sock, user, dynamic_port_num, file_name):
 
 def get_socket_num():
     global available_sockets_num
+
+    if len(available_sockets_num) == 0:
+        return None
 
     index = random.randint(0, len(available_sockets_num) - 1)
 
@@ -292,7 +296,12 @@ def echo_thread(user):
     global users_echo_info
     print(f'[E][{datetime.datetime.now()}] Echo thread started, amount of users remaining: {len(users_echo_info)}')
     
+    LOCK_PORTS_PULL.acquire(True)
     dynamic_sock_num = get_socket_num()
+    LOCK_PORTS_PULL.release()
+    if dynamic_sock_num == None:
+        print(f'[E][{datetime.datetime.now()}] ERROR! No more dynamic sockets available!')
+        return
     user['dynamic_port'] = dynamic_sock_num
     print(f'[E][{datetime.datetime.now()}] dynamic_sock_num retrieved: {dynamic_sock_num}')
     echo_sock = create_sock(dynamic_sock_num)
@@ -309,7 +318,9 @@ def echo_thread(user):
         print(f'[E][{datetime.datetime.now()}] Unable to process the command!')
 
     echo_sock.close()
+    LOCK_PORTS_PULL.acquire(True)
     return_released_socket_num(dynamic_sock_num)
+    LOCK_PORTS_PULL.release()
     print(f'[E][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
 
     LOCK_ECHO.acquire(True)
@@ -395,7 +406,13 @@ def download_thread(user):
     global users_download_info
     print(f'[D][{datetime.datetime.now()}] Download thread started, amount of users remaining: {len(users_download_info)}')
 
+    LOCK_PORTS_PULL.acquire(True)
     dynamic_sock_num = get_socket_num()
+    LOCK_PORTS_PULL.release()
+    if dynamic_sock_num == None:
+        print(f'[D][{datetime.datetime.now()}] ERROR! No more dynamic sockets available!')
+        return
+
     user['dynamic_port'] = dynamic_sock_num
     print(f'[D][{datetime.datetime.now()}] dynamic_sock_num retrieved: {dynamic_sock_num}')
     download_sock = create_sock(dynamic_sock_num)
@@ -411,7 +428,9 @@ def download_thread(user):
         print(f'[D][{datetime.datetime.now()}] Unable to process the command!')
 
     download_sock.close()
+    LOCK_PORTS_PULL.acquire(True)
     return_released_socket_num(dynamic_sock_num)
+    LOCK_PORTS_PULL.release()
     print(f'[D][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
 
     LOCK_DOWNLOAD.acquire(True)
@@ -447,7 +466,13 @@ def upload_thread(user):
     global users_upload_info
     print(f'[U][{datetime.datetime.now()}] Upload thread started, amount of users remaining: {len(users_upload_info)}')
 
+    LOCK_PORTS_PULL.acquire(True)
     dynamic_sock_num = get_socket_num()
+    LOCK_PORTS_PULL.release()
+    if dynamic_sock_num == None:
+        print(f'[U][{datetime.datetime.now()}] ERROR! No more dynamic sockets available!')
+        return
+
     user['dynamic_port'] = dynamic_sock_num
     print(f'[U][{datetime.datetime.now()}] dynamic_sock_num retrieved: {dynamic_sock_num}')
     upload_sock = create_sock(dynamic_sock_num)
@@ -463,7 +488,9 @@ def upload_thread(user):
         print(f'[U][{datetime.datetime.now()}] Unable to process the command!')
 
     upload_sock.close()
+    LOCK_PORTS_PULL.acquire(True)
     return_released_socket_num(dynamic_sock_num)
+    LOCK_PORTS_PULL.release()
     print(f'[U][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
 
     LOCK_UPLOAD.acquire(True)
@@ -524,7 +551,13 @@ def time_thread(user):
     global users_time_info
     print(f'[T][{datetime.datetime.now()}] Time thread started, amount of users remaining: {len(users_time_info)}')
     
+    LOCK_PORTS_PULL.acquire(True)
     dynamic_sock_num = get_socket_num()
+    LOCK_PORTS_PULL.release()
+    if dynamic_sock_num == None:
+        print(f'[T][{datetime.datetime.now()}] ERROR! No more dynamic sockets available!')
+        return
+
     user['dynamic_port'] = dynamic_sock_num
     print(f'[T][{datetime.datetime.now()}] dynamic_sock_num retrieved: {dynamic_sock_num}')
     time_sock = create_sock(dynamic_sock_num)
@@ -541,7 +574,9 @@ def time_thread(user):
         print(f'[T][{datetime.datetime.now()}] Unable to process the command!')
 
     time_sock.close()
+    LOCK_PORTS_PULL.acquire(True)
     return_released_socket_num(dynamic_sock_num)
+    LOCK_PORTS_PULL.release()
     print(f'[T][{datetime.datetime.now()}] dynamic_sock_num returned: {dynamic_sock_num}')
 
     LOCK_TIME.acquire(True)
